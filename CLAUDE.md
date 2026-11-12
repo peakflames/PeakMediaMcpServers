@@ -43,11 +43,15 @@ toolchain-table row "C# / .NET", with conventions taken from the Bitbucket repo)
 | Error handling | FluentResults |
 | Logging | Serilog — plain text to a daily file and stderr |
 | Tests | xUnit, `Microsoft.AspNetCore.Mvc.Testing` / `TestHost`; `tests/Fakes/` fake OpenRouter (canned audio); stub JWT issuer in place of Okta |
-| Build helper | `build.py` (Python; needs `pip install psutil fastmcp`) adapted from Bitbucket |
+| Build helper | `build.py` (Python) adapted from Bitbucket; runs from the project venv `.venv/` holding `psutil` + `fastmcp` |
 | Container | .NET SDK container publish → Docker Hub `peakflames/peak-media-remote-mcp-server` |
 | CI | GitHub Actions on `v*` tags: publish container (same as Bitbucket); no pull-request CI |
 
 ## Local Environment
+
+Run `build.py` from the project venv: `source .venv/bin/activate` once per terminal (or call
+`.venv/bin/python build.py ...`). Claude Code's shell does not keep activation between commands —
+always use `.venv/bin/python build.py ...` there.
 
 ```bash
 python build.py build    # Build solution (auto-stops running app)
@@ -63,7 +67,9 @@ python build.py log [pattern] [--tail n] [--level error]   # Search the log file
 Alternatives: `dotnet build PeakMediaMcpServers.sln`, `dotnet test`,
 `dotnet run --project src/PeakMediaRemoteMcpServer`.
 
-Prerequisites: .NET 11 SDK (`brew install --cask dotnet-sdk`), Python 3.11+, `pip install psutil fastmcp`.
+Prerequisites: .NET 11 SDK (`brew install --cask dotnet-sdk`), Python 3.11+, and the project venv:
+`python3 -m venv .venv && .venv/bin/pip install psutil fastmcp` (Homebrew's Python refuses global
+`pip install`; brew's `fastmcp` formula is the CLI only and cannot be imported, and `psutils` is unrelated).
 Local runs need `OpenRouter__ApiKey` and the `McpAuth` settings in the environment (see Security Baseline).
 
 Verification runs against the real, running project with its real local data. Never mock the
@@ -235,7 +241,7 @@ Run every applicable check before marking an epic Implemented or Complete:
 - Quick-fix branches: `hotfix/issue-<N>-<slug>` when tied to a GitHub issue, otherwise `hotfix/<slug>`.
 - Merges use `--no-ff`. Use explicit file paths in `git add`, never wildcards.
 - Claude asks before every push to a remote.
-- Never commit: `.env` and `.env.*` (except `.env.example`), credential and key files, `data/`
+- Never commit: `.env` and `.env.*` (except `.env.example`), credential and key files, `.venv/`, `data/`
   (SQLite databases), `logs/`, `bin/`, `obj/`, `publish/`, `appsettings.*.local.json`.
 
 ## CRITICAL: Verification Before Commit Rule
