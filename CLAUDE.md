@@ -222,6 +222,9 @@ Run every applicable check before marking an epic Implemented or Complete:
 
 ## Git Workflow
 
+**Remote:** https://github.com/peakflames/PeakMediaMcpServers (public) — default branch `develop`; `main` and
+`develop` protected (pull request with 1 approval, no force-push, no deletion; admins may bypass).
+
 - Base branch: `develop`. Epic, docs, and quick-fix branches are cut from it and merge back into it.
 - Release branch: `main` — receives only release merges from `develop` and tagged releases.
 - Default branch on the hosting service: `develop`.
@@ -303,3 +306,7 @@ git add <files> && git commit -m "feat: ..."                # Commit after verif
 publishes the `peakflames/peak-media-remote-mcp-server` container to Docker Hub (needs the
 `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repository secrets). Branch pushes run no CI. The
 walking-skeleton epic adds the workflow.
+
+**Protection note:** steps 2–6 push directly to protected `main` and `develop` through the
+administrator bypass; a maintainer without admin rights opens a pull request from `develop` to
+`main` instead.
