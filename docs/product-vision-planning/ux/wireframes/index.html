@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PeakMedia MCP Servers — wireframe index</title>
+<style>
+  /* Low fidelity on purpose: grayscale only, system font, no brand. Do not add colors or typefaces. */
+  :root { --ink: #222; --mid: #777; --line: #999; --fill: #f2f2f2; --paper: #fff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; font-family: system-ui, sans-serif; font-size: 14px; color: var(--ink); background: var(--paper); }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--mid); margin: 0 0 20px; }
+  table { border-collapse: collapse; width: 100%; max-width: 940px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mid); border-bottom: 2px solid var(--ink); }
+  td a { color: var(--ink); font-weight: bold; }
+  .meta { color: var(--mid); font-size: 12px; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  footer { margin-top: 20px; font-size: 12px; color: var(--mid); }
+</style>
+</head>
+<body>
+<h1>PeakMedia MCP Servers — wireframe index</h1>
+<p class="sub">6 screens &middot; low-fidelity planning wireframes &middot; grayscale on purpose &middot; site header shell</p>
+<table>
+  <thead>
+    <tr><th>Screen</th><th>Purpose</th><th>States</th><th>Serves</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="S-01-my-usage.html">S-01 My Usage</a></td>
+      <td>A user sees their own month: spent, quota, remaining, clips, cache hits, reset date.</td>
+      <td class="meta">loading / empty / error / populated</td>
+      <td class="meta">S5.1, S5.2, S8.1, S8.2, S8.3</td>
+    </tr>
+    <tr>
+      <td><a href="S-02-usage.html">S-02 Usage</a></td>
+      <td>An admin sees every user's spend for a month and who is over quota.</td>
+      <td class="meta">loading / empty / error / populated</td>
+      <td class="meta">S5.3, S5.4</td>
+    </tr>
+    <tr>
+      <td><a href="S-03-user-detail.html">S-03 User Detail</a></td>
+      <td>An admin sees one user's requests for a month and sets or resets their quota.</td>
+      <td class="meta">loading / empty / error / populated</td>
+      <td class="meta">S5.4, S5.5, S5.7</td>
+    </tr>
+    <tr>
+      <td><a href="S-04-cache.html">S-04 Cache</a></td>
+      <td>An admin checks cache size against the cap, hit rate and evictions.</td>
+      <td class="meta">loading / empty / error / populated</td>
+      <td class="meta">S5.8</td>
+    </tr>
+    <tr>
+      <td><a href="S-05-not-authorized.html">S-05 Not Authorized</a></td>
+      <td>A non-admin who opens an admin page learns why and where to go.</td>
+      <td class="meta">n/a — not data-bearing</td>
+      <td class="meta">S8.4</td>
+    </tr>
+    <tr>
+      <td><a href="S-06-signed-out.html">S-06 Signed Out</a></td>
+      <td>A person confirms the browser session ended and can sign in again.</td>
+      <td class="meta">n/a — not data-bearing</td>
+      <td class="meta">S5.9, S8.5</td>
+    </tr>
+  </tbody>
+</table>
+<footer>
+  Open a screen and use its state buttons to switch loading / empty / error / populated.
+  Narrow the window to check the layout floor.
+  The inventory, the app shell, and the per-scenario flows live in <code>../screens.md</code>.
+</footer>
+</body>
+</html>
