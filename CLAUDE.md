@@ -303,8 +303,9 @@ git add <files> && git commit -m "feat: ..."                # Commit after verif
    ```
 
 **Note:** CI matches BitbucketMcpServers: pushing a `v*` tag runs the GitHub Actions workflow that
-publishes the `peakflames/peak-media-remote-mcp-server` container to Docker Hub (needs the
-`DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repository secrets). Branch pushes run no CI. The
+publishes the `peakflames/peak-media-remote-mcp-server` container to Docker Hub (it logs in with
+`DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`, which the `peakflames` organization already provides as
+organization secrets — the same ones BitbucketMcpServers uses; an org admin may need to grant this repo access). Branch pushes run no CI. The
 walking-skeleton epic adds the workflow.
 
 **Protection note:** steps 2–6 push directly to protected `main` and `develop` through the
