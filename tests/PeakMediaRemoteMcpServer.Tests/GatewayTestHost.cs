@@ -35,6 +35,19 @@ public sealed class GatewayTestHost : IAsyncDisposable
         return StartAsync(stub.Authority, stub.ClientId, stub.ClientSecret, overrides);
     }
 
+    /// <summary>
+    /// A host that delegates sign-in to the stub OIDC issuer, sends OpenRouter traffic to
+    /// <paramref name="openRouter"/>, and lets a test replace services (e.g. the <see cref="TimeProvider"/>).
+    /// </summary>
+    public static Task<GatewayTestHost> StartAsync(
+        StubOidcIssuer stub,
+        FakeOpenRouter openRouter,
+        Action<IServiceCollection>? configureServices = null,
+        IDictionary<string, string?>? overrides = null)
+    {
+        return StartAsync(stub.Authority, stub.ClientId, stub.ClientSecret, overrides, openRouter, configureServices);
+    }
+
     /// <summary>Counts rows in a gateway table (table names are test constants).</summary>
     public async Task<long> CountRowsAsync(string table, string? subject = null)
     {
@@ -59,7 +72,13 @@ public sealed class GatewayTestHost : IAsyncDisposable
         _data.Dispose();
     }
 
-    private static async Task<GatewayTestHost> StartAsync(string authority, string clientId, string clientSecret, IDictionary<string, string?>? overrides)
+    private static async Task<GatewayTestHost> StartAsync(
+        string authority,
+        string clientId,
+        string clientSecret,
+        IDictionary<string, string?>? overrides,
+        FakeOpenRouter? openRouter = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         var data = new TempDirectory();
         var builder = Program.CreateBuilder([]);
@@ -81,7 +100,15 @@ public sealed class GatewayTestHost : IAsyncDisposable
             settings[key] = value;
         }
 
+        if (openRouter is not null)
+        {
+            settings["OpenRouter:BaseUrl"] = "http://openrouter.test/api/v1";
+            builder.Services.AddHttpClient(Program.OpenRouterHttpClientName)
+                .ConfigurePrimaryHttpMessageHandler(openRouter.CreateHandler);
+        }
+
         builder.Configuration.AddInMemoryCollection(settings);
+        configureServices?.Invoke(builder.Services);
         var app = Program.BuildApp(builder);
         await app.StartAsync();
         return new GatewayTestHost(app, data);

@@ -1,6 +1,7 @@
 # PeakMedia MCP Servers — Architecture Document
 
-> **Status:** Describes the as-built system through the sign-in epic (7BASFbp, v0.1.0).
+> **Status:** Describes the as-built system through the narration epic (8po1tRg, v0.1.0).
+> The usage dashboard is not yet built.
 > Sections for capabilities not yet built say so explicitly. Run `/peak-workflow:refresh-docs`
 > after completing epics to keep this document aligned with the code.
 
@@ -36,9 +37,10 @@ console variant serves single users with their own OpenRouter key.
 
 ## 3. Data Sources
 
-- **OpenRouter** — `POST https://openrouter.ai/api/v1/audio/speech`; shared key (`OpenRouter__ApiKey`) on the gateway, user's own key (`PEAK_MEDIA_OPENROUTER_API_KEY`) on stdio.
+- **OpenRouter** — `POST https://openrouter.ai/api/v1/audio/speech` (one request per uncached clip, raw PCM output, zero data retention); `GET /generation?id=` for the real cost of each clip (the generation ID arrives in the `X-Generation-Id` response header). Shared key (`OpenRouter__ApiKey`) on the gateway, user's own key (`PEAK_MEDIA_OPENROUTER_API_KEY`) on stdio, which registers no narration tools in this build.
 - **Okta** — OIDC issuer whose discovery document and JWKS validate caller tokens.
-- **SQLite** — `Storage:DatabasePath` (default `data/peakmedia.db`): usage log, quotas, audio cache, each caller-owned row keyed by Okta subject.
+- **SQLite** — `Storage:DatabasePath` (default `data/peakmedia.db`): usage log, quotas, audio cache index, download tokens, each caller-owned row keyed by Okta subject.
+- **Audio files** — the cached WAV files under `Storage:AudioDirectory` (default `audio/` beside the database; `/app/data/audio` in the container).
 
 ---
 
@@ -53,6 +55,7 @@ console variant serves single users with their own OpenRouter key.
 | `GET /.well-known/oauth-authorization-server` | none | RFC 8414 metadata: `G/authorize`, `G/token`, `G/register`, `jwks_uri`, `code_challenge_methods_supported:["S256"]`, `response_types_supported:["code"]`, grants `authorization_code refresh_token`, token auth `none client_secret_post client_secret_basic`, `authorization_response_iss_parameter_supported:true` |
 | `GET /.well-known/jwks.json` | none | Public half of the token-signing key (RS256) |
 | `POST /register` | none | RFC 7591 dynamic client registration, always on. 201 with `client_id`, `client_secret` (issued even for `none`), `redirect_uris`. Redirect URIs must be loopback (any port) or in `Broker:AllowedRedirectUris`, else 400 `invalid_redirect_uri` |
+| `GET /clips/{token}` | none (the token is the credential) | Serves the WAV behind a download URL: 200 `audio/wav` for a live token, repeatedly, for 15 minutes; 404 for an unknown token; 410 Gone with an RFC 9457 problem-details body telling the caller to run `synthesize_narration` again for an expired one; 503 if the cache index cannot be read. Tokens are 43-character base64url values stored only as SHA-256 |
 | `GET /authorize` | none | Unknown client / unregistered redirect → bare 400 JSON. Missing `response_type=code` or S256 `code_challenge` → redirect to the client with `error`. Otherwise stores a transaction, sets the `pm_consent` cookie, 302 to the OIDC provider with `redirect_uri=G/oauth/callback`, scopes, `state`=transaction ID, nonce, the gateway's own S256 challenge |
 | `GET /oauth/callback` | none (consent cookie) | Unknown state → 400; cookie mismatch → 403; provider `error` → redirect to the client with that error, nothing stored; success → ID token validated, `users` upserted, one-time code → redirect `?code&state&iss` |
 | `POST /token` | client auth | `authorization_code` (PKCE S256 verified, single-use code) and `refresh_token` (rotated). Response `access_token` (RS256 JWT, 60 min), `token_type`, `expires_in`, `refresh_token`. Failures: 400 `invalid_grant` / `invalid_request`, 401 `invalid_client` |
@@ -63,7 +66,15 @@ RS256 with the gateway's signing key, lifetime, 30 s skew). A 401 is challenged 
 carries `WWW-Authenticate: Bearer resource_metadata="G/.well-known/oauth-protected-resource"`. There is
 no anonymous mode and no development login. G is `Broker:IssuerUri`.
 
-Tool inventory: none yet. Tools arrive with the narration epic (see §5).
+**MCP tools** (gateway only; both sit behind the `/mcp` gate):
+
+| Tool | Annotations | Behavior |
+|---|---|---|
+| `list_voices` | read-only, idempotent | Lists the allowed models (`Tts:Models`) with their voices, default voice, whether a style is sent, and names the default model |
+| `synthesize_narration` | — | Turns 1–40 clips (1–4,000 characters each) into speech through the shared key. Cache-first; one progress notification per clip; returns a markdown summary plus one fenced JSON block of per-clip metadata (`n`, `cacheKey`, `durationMs`, `words`, `wpm`, `cached`, `costUsd`, `sampleRate`, `url`). `url` is a 15-minute download link to a 16-bit mono 24 kHz WAV. No audio bytes in the result. Every invalid request is refused with `ERROR:` before any upstream call |
+
+Upstream failures in `synthesize_narration` return a generic `ERROR: OpenRouter could not synthesize clip N. …`.
+The stdio server registers no tools yet (`TtsTools` is gateway-only).
 
 ---
 
@@ -74,10 +85,13 @@ Tool inventory: none yet. Tools arrive with the narration epic (see §5).
 ```
 PeakMediaMcpServers.sln
 Directory.Build.props              <Version> (single source of truth), net11.0, nullable, implicit usings
-src/PeakMediaMcpTools/             shared library: MCP tools, ToolErrorFormatter, ServerIdentity, LoggingSetup, UtcDailyFileSink
+src/PeakMediaMcpTools/             shared library: MCP tools (TtsTools*), ToolErrorFormatter, ServerIdentity, LoggingSetup, UtcDailyFileSink
+  Narration/                       NarrationService (cache-first, sequential, per-clip progress), NarrationRequestValidator, NarrationResultFormatter, ClipCacheKey, WavAudio, WordCounter, TtsCatalog, IClipStore
+  OpenRouter/                      OpenRouterSpeechClient: POST audio/speech (PCM, ZDR) and GET generation?id= for cost
 src/PeakMediaMcpServer/            stdio console server (user's own OpenRouter key, no database)
-src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configuration/, Storage/, Auth/, Broker/
+src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configuration/, Storage/, Auth/, Broker/, Cache/
   Auth/                            McpAuthSetup (JwtBearer + MCP challenge scheme, admin policy), Caller, AccessRule
+  Cache/                           ClipStore (shared audio cache index + WAV files), AudioDirectory, DownloadTokens, ClipEndpoints (GET /clips/{token})
   Broker/                          the gateway's authorization server: SigningKeyProvider, JwtIssuer, PkceHelper,
                                    RedirectUriValidator, UpstreamOidcClient, BrokerJanitor
   Broker/Endpoints/                metadata, JWKS, register, authorize, callback, token, consent cookie
@@ -85,7 +99,8 @@ src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configura
 tests/PeakMediaMcpServer.Tests/    stdio tests (process-level)
 tests/PeakMediaRemoteMcpServer.Tests/  gateway tests (in-process + process-level)
 tests/TestSupport/                 ServerProcess harness, RepoPaths, FreePort, TempDirectory, LogPatterns, ListLogger
-tests/Fakes/                       FakeOpenRouter (canned audio/mpeg at POST /api/v1/audio/speech)
+tests/Fakes/                       FakeOpenRouter (canned PCM at POST /api/v1/audio/speech, cost via generation lookup)
+tests/PeakMediaRemoteMcpServer.Tests/Narration/  one test file per narration TOR group; NarrationClient signs in through the real broker
 tests/StubAuthorizationServer/     StubOidcIssuer — stub OIDC provider (Okta stand-in) on real Kestrel
 tests/manual/                      operator-observed checklists (TOR-02-hKpbfCf: real Okta round-trip)
 build.py                           build / start / stop / test / mcp / log helper (run from .venv)
@@ -119,13 +134,18 @@ with providers cleared + Serilog → MCP stdio transport.
 directory and probes writability; unwritable → `<temp>/peakmedia/peakmedia.db` with a Warning that it
 does not survive a restart. `SqliteConnectionFactory` opens WAL connections and returns
 `Result<SqliteConnection>`. `SchemaMigrator` runs at startup: creates `schema_version` and applies
-the append-only `Migrations` list. **Schema v1** (Epic 7BASFbp): `app_meta(key, value)` (token-signing
+the append-only `Migrations` list. **Schema v2** (Epic 8po1tRg): `audio_cache(cache_key PK, size_bytes,
+duration_ms, created_by_subject, created_utc, last_used_utc)` — the shared cache index, read by key across
+callers, with the creating subject recorded; `clip_downloads(token_hash PK, cache_key → audio_cache ON
+DELETE CASCADE, subject, created_utc, expires_utc)` — download tokens owned by the caller they were issued
+to, stored as SHA-256 only. The WAV bytes live on disk under `Storage:AudioDirectory`, not in SQLite.
+**Schema v1** (Epic 7BASFbp): `app_meta(key, value)` (token-signing
 key); `users(subject PK, email, is_admin, first_seen_utc, last_seen_utc)` — the owner key every later
 table references; `oauth_clients`; `oauth_transactions` (incl. the gateway's upstream PKCE verifier and
 nonce, consent-cookie hash); `oauth_codes(code_hash, subject → users, …)`; `oauth_refresh_tokens(token_hash,
 subject → users, client_id, expires_utc)`. Times are Unix seconds; codes, refresh tokens, client secrets
 and the consent cookie are stored only as SHA-256 hashes; no upstream (Okta) token is stored. A migration failure logs an error and startup
-continues (Known Issue in design-notes §23). Every table that holds a caller's records carries the
+continues (Known Issue in design-notes §29). Every table that holds a caller's records carries the
 caller's Okta subject. `StorageFaultSwitch` (`PEAKMEDIA_TEST_STORAGE_FAULT=fail|delay:<ms>`) makes
 storage fail or slow down for tests and screen-state checks; it is ignored, with a Warning, in Production.
 
@@ -168,6 +188,7 @@ N/A — no user interface
 
 - `BrokerJanitor` (hosted service) — every 10 minutes deletes expired sign-in transactions,
   authorization codes and refresh tokens. A failed sweep logs a warning and retries next tick.
+- Expired `clip_downloads` rows are not swept yet; the table grows until cache housekeeping lands (see design-notes §29).
 
 ---
 
@@ -182,7 +203,9 @@ N/A — no user interface
   the README. Secrets `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` (organization secrets).
 - Runtime environment: `OpenRouter__ApiKey`, `Broker__UpstreamClientSecret` (both required — the
   gateway refuses to start without them), `Broker__UpstreamAuthority`, `Broker__UpstreamClientId`,
-  `Broker__IssuerUri` (the public URL), `McpAuth__Resource` (= IssuerUri + `/mcp`), `Admin__Group`.
+  `Broker__IssuerUri` (the public URL), `McpAuth__Resource` (= IssuerUri + `/mcp`), `Admin__Group`,
+  `Storage__AudioDirectory` (optional; defaults to `audio/` beside the database).
+- Downloads are served from the gateway itself; `Broker__IssuerUri` must be the public URL that clients can reach, since download links are built from it.
 
 ---
 
