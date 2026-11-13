@@ -1,6 +1,6 @@
 # PeakMedia MCP Servers — Architecture Document
 
-> **Status:** Describes the as-built system through the narration epic (8po1tRg, v0.1.0).
+> **Status:** Describes the as-built system through the failure-recovery and cache-eviction epic (8nPWJzI, v0.1.0).
 > The usage dashboard is not yet built.
 > Sections for capabilities not yet built say so explicitly. Run `/peak-workflow:refresh-docs`
 > after completing epics to keep this document aligned with the code.
@@ -40,7 +40,7 @@ console variant serves single users with their own OpenRouter key.
 - **OpenRouter** — `POST https://openrouter.ai/api/v1/audio/speech` (one request per uncached clip, raw PCM output, zero data retention); `GET /generation?id=` for the real cost of each clip (the generation ID arrives in the `X-Generation-Id` response header). Shared key (`OpenRouter__ApiKey`) on the gateway, user's own key (`PEAK_MEDIA_OPENROUTER_API_KEY`) on stdio, which registers no narration tools in this build.
 - **Okta** — OIDC issuer whose discovery document and JWKS validate caller tokens.
 - **SQLite** — `Storage:DatabasePath` (default `data/peakmedia.db`): usage log, quotas, audio cache index, download tokens, each caller-owned row keyed by Okta subject.
-- **Audio files** — the cached WAV files under `Storage:AudioDirectory` (default `audio/` beside the database; `/app/data/audio` in the container).
+- **Audio files** — the cached WAV files under `Storage:AudioDirectory` (default `audio/` beside the database; `/app/data/audio` in the container). Bounded by `Storage:CacheMaxGb` (default 10): least-recently-used clips are evicted (see §7).
 
 ---
 
@@ -73,7 +73,7 @@ no anonymous mode and no development login. G is `Broker:IssuerUri`.
 | `list_voices` | read-only, idempotent | Lists the allowed models (`Tts:Models`) with their voices, default voice, whether a style is sent, and names the default model |
 | `synthesize_narration` | — | Turns 1–40 clips (1–4,000 characters each) into speech through the shared key. Cache-first; one progress notification per clip; returns a markdown summary plus one fenced JSON block of per-clip metadata (`n`, `cacheKey`, `durationMs`, `words`, `wpm`, `cached`, `costUsd`, `sampleRate`, `url`). `url` is a 15-minute download link to a 16-bit mono 24 kHz WAV. No audio bytes in the result. Every invalid request is refused with `ERROR:` before any upstream call |
 
-Upstream failures in `synthesize_narration` return a generic `ERROR: OpenRouter could not synthesize clip N. …`.
+Upstream failures in `synthesize_narration` name the failing clip (`ERROR: … clip N of M …`) and say that earlier clips are saved. A transient failure (timeout, unreachable, 5xx) is retried once after `OpenRouter:RetryDelayMs`; a 402 (out of credit) or 401 (rejected key) is reported without a retry and never reveals the key. Calls stop at the failing clip (design-notes §28–§29).
 The stdio server registers no tools yet (`TtsTools` is gateway-only).
 
 ---
@@ -87,11 +87,11 @@ PeakMediaMcpServers.sln
 Directory.Build.props              <Version> (single source of truth), net11.0, nullable, implicit usings
 src/PeakMediaMcpTools/             shared library: MCP tools (TtsTools*), ToolErrorFormatter, ServerIdentity, LoggingSetup, UtcDailyFileSink
   Narration/                       NarrationService (cache-first, sequential, per-clip progress), NarrationRequestValidator, NarrationResultFormatter, ClipCacheKey, WavAudio, WordCounter, TtsCatalog, IClipStore
-  OpenRouter/                      OpenRouterSpeechClient: POST audio/speech (PCM, ZDR) and GET generation?id= for cost
+  OpenRouter/                      OpenRouterSpeechClient: POST audio/speech (PCM, ZDR) and GET generation?id= for cost; SpeechError (failure kinds), SpeechRetryPolicy
 src/PeakMediaMcpServer/            stdio console server (user's own OpenRouter key, no database)
 src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configuration/, Storage/, Auth/, Broker/, Cache/
   Auth/                            McpAuthSetup (JwtBearer + MCP challenge scheme, admin policy), Caller, AccessRule
-  Cache/                           ClipStore (shared audio cache index + WAV files), AudioDirectory, DownloadTokens, ClipEndpoints (GET /clips/{token})
+  Cache/                           ClipStore (shared audio cache index + WAV files), AudioDirectory, DownloadTokens, ClipEndpoints (GET /clips/{token}), CacheEvictor (LRU eviction + expired-link clean-up), CacheEvictionService (hosted, periodic)
   Broker/                          the gateway's authorization server: SigningKeyProvider, JwtIssuer, PkceHelper,
                                    RedirectUriValidator, UpstreamOidcClient, BrokerJanitor
   Broker/Endpoints/                metadata, JWKS, register, authorize, callback, token, consent cookie
@@ -120,7 +120,7 @@ tool exists.
    (written even when startup is then refused, so every run's first record is the startup line).
 3. `GatewayStartupValidator.Validate` — in order: `McpAuth:Enabled` true, `Broker:UpstreamClientSecret`
    set, `OpenRouter:ApiKey` set, `Broker:UpstreamAuthority` set and https (http only on loopback),
-   `Broker:UpstreamClientId` set, `Broker:IssuerUri` absolute, `McpAuth:Resource` = `IssuerUri + "/mcp"`. Failure → `[FTL] <message naming the next action>`, exit 1, before
+   `Broker:UpstreamClientId` set, `Broker:IssuerUri` absolute, `McpAuth:Resource` = `IssuerUri + "/mcp"`, `Storage:CacheMaxGb` > 0. Failure → `[FTL] <message naming the next action>`, exit 1, before
    Kestrel binds.
 4. `BuildApp(builder)` (the test seam) — clears the default logging providers (the console logger
    writes stdout), adds Serilog, options, storage, auth, MCP; prepares storage; maps endpoints.
@@ -145,7 +145,7 @@ table references; `oauth_clients`; `oauth_transactions` (incl. the gateway's ups
 nonce, consent-cookie hash); `oauth_codes(code_hash, subject → users, …)`; `oauth_refresh_tokens(token_hash,
 subject → users, client_id, expires_utc)`. Times are Unix seconds; codes, refresh tokens, client secrets
 and the consent cookie are stored only as SHA-256 hashes; no upstream (Okta) token is stored. A migration failure logs an error and startup
-continues (Known Issue in design-notes §29). Every table that holds a caller's records carries the
+continues (Known Issue in design-notes §34). Every table that holds a caller's records carries the
 caller's Okta subject. `StorageFaultSwitch` (`PEAKMEDIA_TEST_STORAGE_FAULT=fail|delay:<ms>`) makes
 storage fail or slow down for tests and screen-state checks; it is ignored, with a Warning, in Production.
 
@@ -188,7 +188,7 @@ N/A — no user interface
 
 - `BrokerJanitor` (hosted service) — every 10 minutes deletes expired sign-in transactions,
   authorization codes and refresh tokens. A failed sweep logs a warning and retries next tick.
-- Expired `clip_downloads` rows are not swept yet; the table grows until cache housekeeping lands (see design-notes §29).
+- `CacheEvictionService` (hosted service) — every `Storage:EvictionIntervalMinutes` (default 10), starting one interval after startup, runs `CacheEvictor`. The pass removes least-recently-used clips (cache file and index row, with their download links) while the cache exceeds `Storage:CacheMaxGb`, and deletes download links that expired more than 24 hours ago. A failed pass logs a warning and retries next tick (design-notes §31–§33).
 
 ---
 
@@ -214,7 +214,7 @@ N/A — no user interface
 - The gateway refuses to start when `McpAuth:Enabled` is false, or when `Broker__UpstreamClientSecret`
   or `OpenRouter__ApiKey` is unset.
 - The gateway also refuses to start when the OIDC provider is not configured (`Broker:UpstreamAuthority`,
-  `Broker:UpstreamClientId`) or `McpAuth:Resource` ≠ `Broker:IssuerUri + "/mcp"`.
+  `Broker:UpstreamClientId`) or `McpAuth:Resource` ≠ `Broker:IssuerUri + "/mcp"`, or when `Storage:CacheMaxGb` is not greater than 0.
 - **Gate.** `/mcp` requires a gateway access token: RS256 JWT signed by the persisted key in `app_meta`,
   `iss` = G, `aud` = `McpAuth:Resource`, claims `sub` (OIDC subject), `email`, `role` (`admin`|`user`),
   `jti`, 60 minutes. Identity comes only from the validated token — no header, query parameter or cookie

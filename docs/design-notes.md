@@ -262,33 +262,90 @@ and gone-at-16-minutes checks run in milliseconds.
 When the header is missing, the clip is recorded at $0.00 and a warning is logged.
 
 **Rationale:** The speech response does not carry its price; the generation record does. The $0 fallback keeps a
-synthesis from failing over a missing header, and the warning keeps the gap visible. Confirming the live
-header and lookup is a by-hand OpenRouter check (see §29).
+synthesis from failing over a missing header, and the warning keeps the gap visible. The live header and
+lookup are confirmed by the live gate (`build.py test-live`, see §34).
 
 ---
 
-## 28. Generic Upstream Failure Wording
+## 28. Named Failure Messages for Upstream Errors
 
-**Decision:** An upstream failure in `synthesize_narration` returns `ERROR: OpenRouter could not synthesize clip N.`
-with a next action. Specific wording for 401, 402 and timeouts is deferred.
+**Decision:** A failed clip in `synthesize_narration` returns an `ERROR:` that names the clip and its position
+(for example "clip 5 of 12") and says the earlier clips are saved. An out-of-credit (402) or rejected-key (401)
+answer gets its own admin-facing message, and the key never appears in it. Calls stop at the failing clip.
 
-**Rationale:** Validation errors are specific and precede any spend. Upstream errors are generic for now; the
-specific cases belong to a later epic, once the live failure modes are known.
+**Rationale:** A caller who sees "clip 5 of 12 failed, clips 1–4 are saved" can retry without paying twice, and an
+out-of-credit account needs an administrator, not a retry. The key is never echoed, so a failure cannot leak it.
 
 ---
 
-## 29. Known Issues and Deferred Work
+## 29. One Retry for Transient OpenRouter Failures
 
-- **Expired download rows are never deleted.** `clip_downloads` grows without bound until cache housekeeping
-  lands; expired rows are refused with 410 but not removed. The same applies to cache files, which have no
-  eviction yet.
+**Decision:** A clip is retried once, after `OpenRouter:RetryDelayMs` (default 1000 ms), when OpenRouter times out,
+the connection fails, or it answers 5xx. Each request has a `OpenRouter:ClipTimeout` (default 2 min), which also
+bounds cost lookups because they share the `HttpClient`. 401, 402 and other answers are never retried.
+
+**Rationale:** A single retry absorbs a brief upstream blip without hiding a sustained outage, and retrying 402 or
+401 would only repeat a failure that a retry cannot fix. The bounded timeout keeps one stuck clip from holding a
+call open indefinitely.
+
+---
+
+## 30. Finished Clips Cached Immediately
+
+**Decision:** Each clip is written to the shared audio cache as soon as it is synthesized, not at the end of the call.
+
+**Rationale:** When a later clip fails, a retry of the same call finds the earlier clips cached and pays only for the
+clips still missing (TOR-04-PXIafcT).
+
+---
+
+## 31. LRU Eviction Bounded by Storage:CacheMaxGb
+
+**Decision:** A background pass removes the least-recently-used clips once the cache exceeds `Storage:CacheMaxGb`.
+Order is `last_used_utc`, then `created_utc`, then `rowid`. `ClipStore.FindAsync` refreshes `last_used_utc` on every
+hit. An evicted clip's download links go with it through `ON DELETE CASCADE`. The gateway refuses to start when
+`Storage:CacheMaxGb` is not greater than 0.
+
+**Rationale:** The cache is shared, so it must have a ceiling that does not depend on any one caller. Least-recently-used
+is the cheapest order that keeps the clips people are actually using; the explicit tie-break makes the order
+deterministic for tests.
+
+---
+
+## 32. Expired Download Links Kept 24 Hours
+
+**Decision:** The eviction pass deletes download links that expired more than 24 hours ago
+(`CacheEvictor.ExpiredLinkRetention`). Links expired less than 24 hours ago are kept.
+
+**Rationale:** Keeping an expired link briefly means a caller with a stale URL gets 410 Gone with the "run
+`synthesize_narration` again" message rather than a bare 404.
+
+---
+
+## 33. Evictor as a Singleton on a Real Timer
+
+**Decision:** `CacheEvictor` is a DI singleton. `CacheEvictionService` runs it every `Storage:EvictionIntervalMinutes`
+(default 10) on a real `PeriodicTimer`, starting one interval after startup. Tests call `RunOnceAsync` directly.
+
+**Rationale:** Tests run the same pass the background service runs, without waiting for the timer. The timer is not
+the injected `TimeProvider`, so a test clock cannot stop the sweep from running in production.
+
+---
+
+## 34. Known Issues and Deferred Work
+
+- **Eviction can race an in-flight call.** A pass could remove a clip that an in-flight call has just stored or hit,
+  before its download link is issued. LRU order makes this reachable only when the cache limit is smaller than one
+  call's clips.
+- **Worst-case failure time is about 4 minutes per clip.** Two 2-minute timeouts plus the 1 s delay. Some MCP clients
+  may time out before that.
+- **No Serilog redactor exists.** The Security Baseline suggests one. Instead, `SecretsInLogTests` guards that no code
+  path logs the key or the client secret.
 - **`ClipCacheKey.IsWellFormed` is unused.** Dead code; remove or use it when the cache key is parsed from a URL.
 - **Tool failures are normal text results, not `isError: true`.** This satisfies TOR-01-Ji4u6Ta as written.
   Revisit if MCP clients need the error flag.
-- **`.autopilot/` is tracked.** The autopilot test-change log (`.autopilot/test-changes.jsonl`) is committed on the
-  feature branch, and `.autopilot/` is not in `.gitignore`.
-- **Real OpenRouter synthesis is not exercised in CI.** Tests use `FakeOpenRouter`. The live speech call and the
-  `X-Generation-Id` cost lookup are a by-hand check against the real service.
+- **Live OpenRouter is not run in CI.** Tests use `FakeOpenRouter`. The live gate (`build.py test-live`) is a
+  by-hand run with a real key, and it covers the speech call and the `X-Generation-Id` cost lookup.
 - **`/token` verifies a client secret only when one is presented.** A client registered as
   `client_secret_post` can redeem a code without presenting its secret, and the refresh grant accepts a
   request with no `client_id`. PKCE and refresh-token rotation still protect both paths; consider tightening.
