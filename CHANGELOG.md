@@ -31,3 +31,5 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - The gateway refuses to start when `McpAuth:Enabled` is false, `Broker__UpstreamClientSecret` is unset,
   or `OpenRouter__ApiKey` is unset.
 - SQLite storage bootstrap (`Storage:DatabasePath`, temp-path fallback with a warning, schema versioning).
+- `docs/architecture.md` and `docs/design-notes.md` describe the as-built walking skeleton, its design
+  decisions, and known issues.
