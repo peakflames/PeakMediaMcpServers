@@ -15,7 +15,7 @@ public static class NarrationResultFormatter
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public static string Format(IReadOnlyList<ClipResult> clips)
+    public static string Format(IReadOnlyList<ClipResult> clips, string? quotaNote = null)
     {
         var median = MedianWpm(clips);
         var cached = clips.Count(c => c.Cached);
@@ -25,7 +25,7 @@ public static class NarrationResultFormatter
         text.AppendLine();
         text.AppendLine(string.Create(
             CultureInfo.InvariantCulture,
-            $"{clips.Count} clips · {cached} cached · ${cost:0.0000} this call · median {median} wpm"));
+            $"{clips.Count} clips · {cached} cached · {CallCost(cost)} this call · median {median} wpm"));
 
         var slow = clips.Where(c => c.Wpm < median * SlowClipRatio).ToList();
         if (slow.Count > 0)
@@ -52,7 +52,22 @@ public static class NarrationResultFormatter
         text.AppendLine("```");
         text.AppendLine();
         text.Append("Each `url` downloads the clip's WAV for 15 minutes; call synthesize_narration again with the same request for new links — cached clips are free.");
+        if (!string.IsNullOrEmpty(quotaNote))
+        {
+            text.AppendLine();
+            text.AppendLine();
+            text.Append(quotaNote);
+        }
+
         return text.ToString();
+    }
+
+    /// <summary>A call's cost: <c>$0.00</c> for a free call, otherwise four decimals (e.g. <c>$0.0100</c>).</summary>
+    public static string CallCost(decimal cost)
+    {
+        return cost == 0m
+            ? "$0.00"
+            : string.Create(CultureInfo.InvariantCulture, $"${cost:0.0000}");
     }
 
     /// <summary>The median of the clips' wpm, rounded to a whole number.</summary>

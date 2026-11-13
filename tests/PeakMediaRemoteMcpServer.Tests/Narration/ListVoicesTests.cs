@@ -2,9 +2,9 @@ namespace PeakMediaRemoteMcpServer.Tests.Narration;
 
 public class ListVoicesTests
 {
-    // Tool inventory: a signed-in tools/list offers both narration tools.
+    // Tool inventory: a signed-in tools/list offers the narration tools and my_usage (TOR-02-dj60B0R).
     [Fact]
-    public async Task Tools_list_offers_synthesize_narration_and_list_voices()
+    public async Task Tools_list_offers_synthesize_narration_list_voices_and_my_usage()
     {
         await using var client = await NarrationClient.StartAsync();
 
@@ -12,6 +12,7 @@ public class ListVoicesTests
 
         Assert.Contains("synthesize_narration", names);
         Assert.Contains("list_voices", names);
+        Assert.Contains("my_usage", names);
     }
 
     // TOR-03-Vaata1w: list_voices lists exactly the four allowed models with default voice and style-sent,

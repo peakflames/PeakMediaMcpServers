@@ -87,6 +87,32 @@ public sealed class SchemaMigrator
             CREATE INDEX ix_clip_downloads_subject ON clip_downloads(subject);
             CREATE INDEX ix_clip_downloads_expires ON clip_downloads(expires_utc);
             """),
+
+        // 3 — quotas and usage (Epic EYGrros): one usage_log row per clip of a call (a synthesized clip
+        // at its cost, a cache hit at 0) and per-user monthly quota overrides. Both are owned by
+        // `subject` and read or written only through AccessRule (the caller's own rows, or an admin).
+        // Money is integer nano-dollars so sums are exact; times are Unix milliseconds (UTC). The
+        // usage log never holds narration text — only its character count and cache key.
+        (3, """
+            CREATE TABLE usage_log (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject        TEXT NOT NULL,
+                at_utc         INTEGER NOT NULL,
+                model          TEXT NOT NULL,
+                voice          TEXT NOT NULL,
+                characters     INTEGER NOT NULL,
+                cost_nanousd   INTEGER NOT NULL,
+                cache_key      TEXT NOT NULL,
+                cache_hit      INTEGER NOT NULL
+            );
+            CREATE INDEX ix_usage_log_subject_at ON usage_log(subject, at_utc);
+            CREATE TABLE quota_overrides (
+                subject         TEXT PRIMARY KEY,
+                monthly_nanousd INTEGER NOT NULL,
+                set_by_subject  TEXT NOT NULL,
+                set_at_utc      INTEGER NOT NULL
+            );
+            """),
     ];
 
     private readonly SqliteConnectionFactory _connections;

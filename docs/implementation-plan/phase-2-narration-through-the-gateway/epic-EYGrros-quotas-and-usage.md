@@ -1,7 +1,7 @@
 # Epic EYGrros: Quotas and usage
 
 **Phase:** 2 — Narration through the gateway
-**Status:** Not Started
+**Status:** Complete — 2026-11-13
 **Dependencies:** Epic 8po1tRg (Narrate a spine — synthesis and cache hits), Epic 8nPWJzI (Failure recovery and cache eviction — partial-failure behavior)
 **Planned by:** Todd Schavey
 **Planned:** 2026-11-12

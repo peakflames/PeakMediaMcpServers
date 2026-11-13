@@ -67,6 +67,7 @@ public partial class Program
         builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.SectionName));
         builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
         builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
+        builder.Services.Configure<QuotaOptions>(builder.Configuration.GetSection(QuotaOptions.SectionName));
 
         builder.Services.Configure<TtsOptions>(builder.Configuration.GetSection(TtsOptions.SectionName));
 
@@ -126,7 +127,7 @@ public partial class Program
 
     /// <summary>
     /// The narration tools' services: the configured catalogue, the shared clip cache, download links,
-    /// and the OpenRouter client carrying the server-held key (set on the client, never logged).
+    /// the usage log and quotas, and the OpenRouter client carrying the server-held key (set on the client, never logged).
     /// </summary>
     private static void AddNarration(IServiceCollection services)
     {
@@ -150,6 +151,9 @@ public partial class Program
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
             client.Timeout = options.ClipTimeout;
         });
+        services.AddSingleton<UsageStore>();
+        services.AddSingleton<QuotaStore>();
+        services.AddSingleton<IUsageLedger, UsageLedger>();
         services.AddTransient<NarrationService>();
         services.AddSingleton<CacheEvictor>();
         services.AddHostedService<CacheEvictionService>();

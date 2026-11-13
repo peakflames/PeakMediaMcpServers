@@ -1,7 +1,7 @@
 # PeakMedia MCP Servers — Architecture Document
 
-> **Status:** Describes the as-built system through the failure-recovery and cache-eviction epic (8nPWJzI, v0.1.0).
-> The usage dashboard is not yet built.
+> **Status:** Describes the as-built system through the quotas-and-usage epic (EYGrros, v0.1.0): per-user
+> usage log, monthly quotas, the `my_usage` tool. The usage dashboard is not yet built.
 > Sections for capabilities not yet built say so explicitly. Run `/peak-workflow:refresh-docs`
 > after completing epics to keep this document aligned with the code.
 
@@ -71,7 +71,8 @@ no anonymous mode and no development login. G is `Broker:IssuerUri`.
 | Tool | Annotations | Behavior |
 |---|---|---|
 | `list_voices` | read-only, idempotent | Lists the allowed models (`Tts:Models`) with their voices, default voice, whether a style is sent, and names the default model |
-| `synthesize_narration` | — | Turns 1–40 clips (1–4,000 characters each) into speech through the shared key. Cache-first; one progress notification per clip; returns a markdown summary plus one fenced JSON block of per-clip metadata (`n`, `cacheKey`, `durationMs`, `words`, `wpm`, `cached`, `costUsd`, `sampleRate`, `url`). `url` is a 15-minute download link to a 16-bit mono 24 kHz WAV. No audio bytes in the result. Every invalid request is refused with `ERROR:` before any upstream call |
+| `synthesize_narration` | — | Turns 1–40 clips (1–4,000 characters each) into speech through the shared key. Refused with `ERROR:` before any synthesis when the caller's month-to-date spend has reached their quota (checked before the cache lookup, so cached calls are refused too). Cache-first; one progress notification per clip; each synthesized clip is charged to the caller at OpenRouter's reported cost (cache hits cost nothing). Returns a markdown summary plus one fenced JSON block of per-clip metadata (`n`, `cacheKey`, `durationMs`, `words`, `wpm`, `cached`, `costUsd`, `sampleRate`, `url`). `url` is a 15-minute download link to a 16-bit mono 24 kHz WAV. No audio bytes in the result. A call that starts under quota runs to completion and notes in its result when the caller is then over quota. Every invalid request is refused with `ERROR:` before any upstream call |
+| `my_usage` | read-only, idempotent | The caller's own UTC calendar month: amount spent, monthly quota, remaining amount (to the cent), clips synthesized, cache hits and the reset time. Works for callers who are over quota. Reads only through the caller-bound `IUsageLedger` |
 
 Upstream failures in `synthesize_narration` name the failing clip (`ERROR: … clip N of M …`) and say that earlier clips are saved. A transient failure (timeout, unreachable, 5xx) is retried once after `OpenRouter:RetryDelayMs`; a 402 (out of credit) or 401 (rejected key) is reported without a retry and never reveals the key. Calls stop at the failing clip (design-notes §28–§29).
 The stdio server registers no tools yet (`TtsTools` is gateway-only).
@@ -85,8 +86,8 @@ The stdio server registers no tools yet (`TtsTools` is gateway-only).
 ```
 PeakMediaMcpServers.sln
 Directory.Build.props              <Version> (single source of truth), net11.0, nullable, implicit usings
-src/PeakMediaMcpTools/             shared library: MCP tools (TtsTools*), ToolErrorFormatter, ServerIdentity, LoggingSetup, UtcDailyFileSink
-  Narration/                       NarrationService (cache-first, sequential, per-clip progress), NarrationRequestValidator, NarrationResultFormatter, ClipCacheKey, WavAudio, WordCounter, TtsCatalog, IClipStore
+src/PeakMediaMcpTools/             shared library: MCP tools (TtsTools*, incl. TtsTools_MyUsage), ToolErrorFormatter, ServerIdentity, LoggingSetup, UtcDailyFileSink
+  Narration/                       NarrationService (quota gate, cache-first, sequential, per-clip progress and charging), NarrationRequestValidator, NarrationResultFormatter, ClipCacheKey, WavAudio, WordCounter, TtsCatalog, IClipStore, IUsageLedger (UsageStatus, UsageEntry, UsageText)
   OpenRouter/                      OpenRouterSpeechClient: POST audio/speech (PCM, ZDR) and GET generation?id= for cost; SpeechError (failure kinds), SpeechRetryPolicy
 src/PeakMediaMcpServer/            stdio console server (user's own OpenRouter key, no database)
 src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configuration/, Storage/, Auth/, Broker/, Cache/
@@ -96,6 +97,7 @@ src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configura
                                    RedirectUriValidator, UpstreamOidcClient, BrokerJanitor
   Broker/Endpoints/                metadata, JWKS, register, authorize, callback, token, consent cookie
   Broker/Storage/                  AppMetaStore, UserStore, ClientStore, TransactionStore, CodeStore, RefreshTokenStore, TokenHashing
+  Usage/                           UsageStore (usage log reads/writes), QuotaStore (default quota + admin overrides), UsageLedger (binds stores to the caller from the token), UsageMonth (UTC calendar-month window, NanoUsd money type)
 tests/PeakMediaMcpServer.Tests/    stdio tests (process-level)
 tests/PeakMediaRemoteMcpServer.Tests/  gateway tests (in-process + process-level)
 tests/TestSupport/                 ServerProcess harness, RepoPaths, FreePort, TempDirectory, LogPatterns, ListLogger
@@ -134,7 +136,12 @@ with providers cleared + Serilog → MCP stdio transport.
 directory and probes writability; unwritable → `<temp>/peakmedia/peakmedia.db` with a Warning that it
 does not survive a restart. `SqliteConnectionFactory` opens WAL connections and returns
 `Result<SqliteConnection>`. `SchemaMigrator` runs at startup: creates `schema_version` and applies
-the append-only `Migrations` list. **Schema v2** (Epic 8po1tRg): `audio_cache(cache_key PK, size_bytes,
+the append-only `Migrations` list. **Schema v3** (Epic EYGrros): `usage_log(id, subject, at_utc, model, voice, characters, cost_nanousd,
+cache_key, cache_hit)` — one row per clip charged or served from cache, owned by the caller's subject;
+it holds character counts and cache keys, never narration text. `quota_overrides(subject PK,
+monthly_nanousd, set_by_subject, set_at_utc)` — administrator-set monthly quotas. Money is stored as
+integer nano-dollars. The default quota is `Quota:DefaultMonthlyUsd` (25) in `appsettings.json`.
+**Schema v2** (Epic 8po1tRg): `audio_cache(cache_key PK, size_bytes,
 duration_ms, created_by_subject, created_utc, last_used_utc)` — the shared cache index, read by key across
 callers, with the creating subject recorded; `clip_downloads(token_hash PK, cache_key → audio_cache ON
 DELETE CASCADE, subject, created_utc, expires_utc)` — download tokens owned by the caller they were issued
@@ -145,7 +152,7 @@ table references; `oauth_clients`; `oauth_transactions` (incl. the gateway's ups
 nonce, consent-cookie hash); `oauth_codes(code_hash, subject → users, …)`; `oauth_refresh_tokens(token_hash,
 subject → users, client_id, expires_utc)`. Times are Unix seconds; codes, refresh tokens, client secrets
 and the consent cookie are stored only as SHA-256 hashes; no upstream (Okta) token is stored. A migration failure logs an error and startup
-continues (Known Issue in design-notes §34). Every table that holds a caller's records carries the
+continues (Known Issue in design-notes §41). Every table that holds a caller's records carries the
 caller's Okta subject. `StorageFaultSwitch` (`PEAKMEDIA_TEST_STORAGE_FAULT=fail|delay:<ms>`) makes
 storage fail or slow down for tests and screen-state checks; it is ignored, with a Warning, in Production.
 
@@ -233,6 +240,9 @@ N/A — no user interface
   decided at sign-in and stored on `users`. `Caller.From(principal)` builds the caller from the token;
   `AccessRule.CanAccess(caller, ownerSubject)` (owner or admin) and `AccessRule.RequireAdmin` are the one
   place every later tool and page decides access; the `admin` authorization policy uses the same rule.
+- **Quotas.** Every usage and quota read or write goes through `UsageStore`/`QuotaStore` with the caller
+  from the validated token (`UsageLedger`), so the owner-or-admin rule of `AccessRule` applies. Only
+  administrators may set quota overrides. Usage and quota records never carry narration text.
 - Secrets arrive only through environment variables; `appsettings*.json` holds non-secret values.
   Secret-holding classes (`BrokerOptions`, `OpenRouterOptions`, token/registration responses, the
   sign-in transaction) are `sealed class`, never records. Logs never carry tokens, codes or secrets;

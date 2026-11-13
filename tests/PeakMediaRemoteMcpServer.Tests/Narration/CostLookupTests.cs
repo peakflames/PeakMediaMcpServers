@@ -21,18 +21,25 @@ public class CostLookupTests
         Assert.All(result.Progress, p => Assert.EndsWith("$0.0042)", p.GetProperty("message").GetString(), StringComparison.Ordinal));
     }
 
-    // A generation that never appears still yields the clip, recorded at cost 0, after the last retry.
+    // A generation that never appears still yields the clip after the last retry. Retargeted by Epic
+    // EYGrros (TOR-05-dFazrDm): the clip is no longer recorded at cost 0 but charged at the configured
+    // price of the model for its characters.
     [Fact]
-    public async Task Cost_is_zero_when_generation_never_appears()
+    public async Task Cost_is_estimated_from_configured_price_when_generation_never_appears()
     {
         await using var client = await NarrationClient.StartAsync();
         client.OpenRouter.GenerationNotReadyFor = int.MaxValue;
+        var clips = NarrationClient.Clips(1);
+        var text = (string)((Dictionary<string, object>)clips[0])["text"];
+        var catalog = client.Host.Services.GetRequiredService<TtsCatalog>();
+        var model = catalog.FindModel(catalog.DefaultModel)!;
 
-        var result = await client.SynthesizeAsync(NarrationClient.Clips(1));
+        var result = await client.SynthesizeAsync(clips);
 
         var entry = Assert.Single(NarrationClient.Entries(result.Text));
         Assert.False(entry.GetProperty("cached").GetBoolean());
-        Assert.Equal(0m, entry.GetProperty("costUsd").GetDecimal());
+        Assert.Equal(model.EstimateCost(text.Length), entry.GetProperty("costUsd").GetDecimal());
+        Assert.NotEqual(0m, entry.GetProperty("costUsd").GetDecimal());
         Assert.True(client.OpenRouter.GenerationLookups > 1, "the lookup should have been retried");
     }
 }
