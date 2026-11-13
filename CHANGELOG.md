@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 ### Changed
+- `build.py smoke` runs the Run-the-tool gate unattended: it starts its own gateway against the test sign-in server, signs in through the gateway's real flow (no browser, no bypass), lists the tools and stops everything. The real Okta sign-in (`build.py mcp tools --oauth`) moves to a by-hand release check.
 ### Fixed
 
 ---

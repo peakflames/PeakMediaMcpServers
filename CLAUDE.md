@@ -62,6 +62,7 @@ python build.py status   # Check if application is running
 python build.py run      # Run in foreground
 python build.py test     # Run the test suite (dotnet test)
 python build.py test-live   # One real OpenRouter call (~$0.001); fails if skipped
+python build.py smoke       # Own gateway + test sign-in server: sign in (no browser), list tools, stop
 python build.py mcp ping|info|tools|call <tool> '<json>'   # Talk to the running server
 python build.py log [pattern] [--tail n] [--level error]   # Search the log file
 ```
@@ -77,8 +78,8 @@ Local runs need `OpenRouter__ApiKey` and the `McpAuth` settings in the environme
 Verification runs against the real, running project with its real local data. Never mock the
 project's own API or database to make a check pass. (The OpenRouter upstream and the Okta issuer
 are external — tests use `tests/Fakes/` and the stub JWT issuer; the real OpenRouter round trip is
-checked by the Live upstream gate (`build.py test-live`), and the real Okta round trip is still
-checked by hand.)
+checked by the Live upstream gate (`build.py test-live`), and the real Okta round trip is
+checked by hand as a release check.)
 
 ## Tool Hygiene & Operability
 
@@ -284,7 +285,8 @@ Run every applicable check before marking an epic Implemented or Complete:
 - **Tests:** `.venv/bin/python build.py test` (tests/)
 - **Lint / format:** `dotnet format PeakMediaMcpServers.sln --verify-no-changes`
 - **Live upstream:** `.venv/bin/python build.py test-live` — one real OpenRouter call (~$0.001); must report 1 passed, 0 skipped. Needs a real key in `.env` or `PEAK_MEDIA_LIVE_OPENROUTER_API_KEY`.
-- **Run the tool:** `.venv/bin/python build.py start` then `curl http://localhost:5108/version` → `{"name":"PeakMediaRemoteMcpServer","version":"<semver>"}` and `.venv/bin/python build.py mcp tools` lists the tools; stdio: `dotnet run --project src/PeakMediaMcpServer -- --version` → `PeakMediaMcpServer v<semver>`, exit 0
+- **Run the tool:** `.venv/bin/python build.py smoke` lists the tools (starts and stops its own gateway against the test sign-in server; no browser); then `.venv/bin/python build.py start`, `curl http://localhost:5108/version` → `{"name":"PeakMediaRemoteMcpServer","version":"<semver>"}`, `.venv/bin/python build.py stop`; stdio: `dotnet run --project src/PeakMediaMcpServer -- --version` → `PeakMediaMcpServer v<semver>`, exit 0
+- **Release checks (by hand — not epic gates; `/peak-workflow:wrapup-epic` and autopilot skip them):** with the real Okta settings in the environment, `.venv/bin/python build.py start`, then `.venv/bin/python build.py mcp tools --oauth` and sign in through Okta in the browser — the tool list comes back; `.venv/bin/python build.py stop`.
 - **Visual / console (UI only):** `playwright-cli` against the running dashboard (`.venv/bin/python build.py start`, then `http://localhost:5108/`), signed in through the stub issuer's test helper
 
 ## Important Reminders
@@ -368,9 +370,9 @@ A successful build (compile) does NOT equal working code. The workflow MUST be:
 ```bash
 dotnet format PeakMediaMcpServers.sln --verify-no-changes   # Check formatting + analyzers
 python build.py test                                        # Unit/integration tests
+python build.py smoke                                       # Sign in (test server), verify MCP tool inventory
 python build.py start                                       # Build & start (port 5108)
 curl http://localhost:5108/version                          # Verify version endpoint
-python build.py mcp tools                                   # Verify MCP tool inventory
 python build.py stop                                        # Stop when done
 git add <files> && git commit -m "feat: ..."                # Commit after verification
 ```
@@ -380,6 +382,9 @@ git add <files> && git commit -m "feat: ..."                # Commit after verif
 **Prerequisites:** Must be on `develop` branch with a clean working tree.
 
 **Steps:**
+
+0. **Release checks by hand** — run the **Release checks** line under Verification & Quality Gates
+   (real Okta sign-in in the browser). Do not release if one fails.
 
 1. **Finalize CHANGELOG** — Change `## [X.Y.Z] — UNDER DEVELOPMENT` → `## [X.Y.Z] — YYYY-MM-DD` in `CHANGELOG.md`
    - Commit: `chore: release vX.Y.Z`
