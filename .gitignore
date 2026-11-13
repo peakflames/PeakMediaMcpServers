@@ -1,0 +1,35 @@
+# .NET build output
+[Bb]in/
+[Oo]bj/
+publish/
+artifacts/
+*.user
+*.suo
+*.rsuser
+.vs/
+.idea/
+*.sln.iml
+TestResults/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Runtime data and logs (SQLite databases hold per-user usage; logs may hold caller ids)
+data/
+logs/
+*.db
+*.db-wal
+*.db-shm
+*.log
+.peak-media-mcp.pid
+
+# Secrets
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+
+# OS
+.DS_Store

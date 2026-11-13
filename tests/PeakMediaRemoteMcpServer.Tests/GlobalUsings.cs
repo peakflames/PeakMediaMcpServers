@@ -1,0 +1,12 @@
+global using System.Globalization;
+global using System.Net;
+global using System.Text.Json;
+global using System.Text.RegularExpressions;
+global using Microsoft.AspNetCore.Builder;
+global using Microsoft.AspNetCore.Hosting;
+global using Microsoft.AspNetCore.TestHost;
+global using Microsoft.Extensions.Configuration;
+global using PeakMediaRemoteMcpServer.Configuration;
+global using PeakMediaRemoteMcpServer.Storage;
+global using PeakMediaTestSupport;
+global using Xunit;
