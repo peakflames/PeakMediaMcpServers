@@ -1,6 +1,6 @@
 # PeakMedia MCP Servers — Design Decision Notes
 
-> **Status:** Decisions as built through the narration epic (8po1tRg, v0.1.0). Decisions
+> **Status:** Decisions as built through the quotas-and-usage epic (EYGrros, v0.1.0). Decisions
 > from later epics are added by `/peak-workflow:refresh-docs` from their session handoffs.
 
 ---
@@ -259,11 +259,12 @@ and gone-at-16-minutes checks run in milliseconds.
 ## 27. Cost From the Generation Lookup
 
 **Decision:** A clip's real cost comes from `GET /generation?id=` using the `X-Generation-Id` response header.
-When the header is missing, the clip is recorded at $0.00 and a warning is logged.
+When the cost cannot be read, the clip is charged at the model's configured price with a warning logged
+(§36; this replaces the earlier $0 fallback).
 
-**Rationale:** The speech response does not carry its price; the generation record does. The $0 fallback keeps a
-synthesis from failing over a missing header, and the warning keeps the gap visible. The live header and
-lookup are confirmed by the live gate (`build.py test-live`, see §34).
+**Rationale:** The speech response does not carry its price; the generation record does. Charging the
+configured price keeps a synthesis from failing over an unreadable cost and stops a caller's spend from
+being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §41).
 
 ---
 
@@ -332,8 +333,91 @@ the injected `TimeProvider`, so tests that advance the fake clock never trigger 
 
 ---
 
-## 34. Known Issues and Deferred Work
+## 34. Quota Gate Runs Before the Cache Lookup
 
+**Decision:** `NarrationService` checks the caller's month-to-date spend before any cache lookup. A caller whose
+spend is at or above their quota is refused, with the spend, quota and reset time named, and no OpenRouter request
+is made. Spend equal to the quota counts as over, both for the refusal and for the post-call note. The quota is checked
+only at call start; a call that starts under quota runs to completion and notes in its result when the caller is then over.
+
+**Rationale:** A quota that only limited uncached calls would let a caller with a full cache keep spending through
+repeat calls, so the gate applies to every call. Checking at the start (not per clip) keeps a call whole once begun;
+the trade-off is bounded overspend under concurrency (§41).
+
+---
+
+## 35. Money as Integer Nano-Dollars
+
+**Decision:** Every amount (`usage_log.cost_nanousd`, `quota_overrides.monthly_nanousd`) is stored as an integer
+nano-dollar count (`NanoUsd`). Display rounds to the cent (`UsageText.Dollars`).
+
+**Rationale:** Monthly sums of fractional per-clip costs stay exact in SQLite with no floating-point drift, so the
+quota comparison in §34 is decided on exact values. Rounding happens only at the display edge.
+
+---
+
+## 36. Configured Price Fallback When the Reported Cost Is Unreadable
+
+**Decision:** When `GET /generation` cannot provide a clip's cost, the clip is charged at the model's
+`PriceUsdPerThousandCharacters` (configured in `Tts:Models`) and a `[WRN]` record is logged. A clip with a readable
+cost is charged that cost, and cache hits are charged nothing.
+
+**Rationale:** Charging $0 on a read failure let the spend under-count against the quota. The configured price is
+an estimate, so the fallback is visible in the log and is listed in §41 for calibration.
+
+---
+
+## 37. Usage Access Through the Caller-Bound Ledger
+
+**Decision:** Tools use `IUsageLedger`, which `UsageLedger` binds to the caller from the validated access token.
+`UsageStore` and `QuotaStore` take an explicit acting `Caller` and decide access through `AccessRule`, so the
+usage dashboard can read any user's usage and set overrides as an administrator through the same rule.
+
+**Rationale:** A tool can only ever see its own caller's records, and the dashboard reuses the same store code
+with an explicit, admin-checked caller instead of a second access path (Security Baseline: one access rule).
+
+---
+
+## 38. A Failed Usage Write Does Not Fail the Call
+
+**Decision:** When a `usage_log` row cannot be written, the failure is logged at Error and the call still returns its
+audio. The clip is not charged.
+
+**Rationale:** The audio has already been synthesized and paid for upstream; failing the caller's call over a
+bookkeeping write would hide the audio without refunding the cost. The trade-off is an uncharged clip, recorded in
+§41 as a known gap.
+
+---
+
+## 39. Month Boundaries in UTC
+
+**Decision:** The quota month is the calendar month in UTC; spend is counted from 00:00 UTC on the first day
+(`UsageMonth`), and `my_usage` reports the reset time in UTC.
+
+**Rationale:** One boundary for every caller and server, independent of the host's timezone (the same reasoning as
+§9 for log file names).
+
+---
+
+## 40. Narration Text Is Never Stored
+
+**Decision:** `usage_log` holds the model, voice, character count, cost, cache key and cache-hit flag. It holds no
+narration text, and nothing that logs usage writes it.
+
+**Rationale:** Narration can be sensitive and is not needed for accounting; the cache key identifies the clip. Verified
+by a test that the marker text is absent from the database, its WAL and SHM files, stderr and the log directory.
+
+---
+
+## 41. Known Issues and Deferred Work
+
+- **Quota is checked only at call start.** Concurrent calls can each start under quota, so overspend is bounded by
+  concurrency × 40 clips (§34).
+- **Fallback prices are uncalibrated.** The `PriceUsdPerThousandCharacters` values in `appsettings.json` are
+  estimates (§36); calibrate against a real generation's `total_cost` before relying on the fallback.
+- **Display rounding at the quota edge.** A spend just under quota (for example $24.996) shows "$25.00 spent,
+  $0.00 remaining" while calls are still allowed. Cosmetic.
+- **Failed usage writes leave the clip uncharged** (§38), logged at Error.
 - **Eviction can race an in-flight call.** A pass could remove a clip that an in-flight call has just stored or hit,
   before its download link is issued. LRU order makes this reachable only when the cache limit is smaller than one
   call's clips.
