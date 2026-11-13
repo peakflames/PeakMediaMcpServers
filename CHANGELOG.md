@@ -44,3 +44,16 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - Okta administrator checklist in the README; stub OIDC issuer and `TestSignIn` helper for tests.
 - `docs/architecture.md` and `docs/design-notes.md` describe the as-built walking skeleton, its design
   decisions, and known issues.
+- `list_voices` MCP tool: the allowed TTS models, the default model, and each model's voices (from the
+  `Tts` section of `appsettings.json`).
+- `synthesize_narration` MCP tool: narrates 1–40 clips in one call through the gateway's shared
+  OpenRouter key, validating the whole request before any spend; clips run in order, cache first, with
+  one MCP progress notification per clip; the result is a markdown summary (clips, cached, cost, median
+  wpm, slow-clip warnings) plus one JSON block with a download URL per clip. Gateway only — the stdio
+  server does not offer it.
+- Shared audio cache keyed by model, voice, style and text: schema v2 adds `audio_cache` and
+  `clip_downloads`; WAV files under `Storage:AudioDirectory` (default `audio/` beside the database).
+- `GET /clips/{token}` downloads a clip without sign-in through a random token valid for 15 minutes;
+  unknown tokens return 404 and expired ones 410 as RFC 9457 problem details.
+- Per-clip cost from OpenRouter's generation lookup; recorded as $0 with a warning when unavailable
+  (to be confirmed against real OpenRouter).
