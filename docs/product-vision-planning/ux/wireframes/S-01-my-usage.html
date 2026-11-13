@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S-01 My Usage — wireframe</title>
+<style>
+  /* Low fidelity on purpose: grayscale only, system font, no brand. Do not add colors or typefaces. */
+  :root { --ink: #222; --mid: #777; --line: #999; --fill: #f2f2f2; --paper: #fff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; font-size: 14px; color: var(--ink); background: var(--paper); }
+  .wf-header { padding: 8px 16px; border-bottom: 2px solid var(--ink); }
+  .wf-header strong { font-size: 16px; }
+  .switcher { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px dashed var(--line); }
+  .switcher button { font: inherit; padding: 4px 10px; background: var(--paper); border: 1px solid var(--ink); cursor: pointer; }
+  .switcher button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .chrome { position: relative; }
+  .chrome > .clabel { position: absolute; top: 2px; right: 8px; font-size: 10px; color: var(--mid); text-transform: uppercase; letter-spacing: .05em; }
+  .app-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .app-header .brand { font-weight: bold; }
+  .app-header nav { display: flex; gap: 4px; }
+  .app-header .spacer { flex: 1 1 auto; }
+  .app-header a, .app-header button { font: inherit; color: var(--ink); border: 1px solid var(--ink); background: var(--fill); padding: 3px 8px; text-decoration: none; cursor: pointer; }
+  .app-header nav a[aria-current="page"] { background: var(--ink); color: var(--paper); }
+  .app-header .who { color: var(--mid); font-size: 12px; }
+  .menu-trigger { display: none; }
+  .app-footer { padding: 8px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--mid); }
+  main { padding: 0 16px 8px; }
+  .auth-wrap { max-width: 400px; margin: 0 auto; }
+  .state { display: none; padding: 8px 0; }
+  .state.active { display: block; }
+  .region { position: relative; border: 2px dashed var(--line); padding: 16px 12px 12px; margin: 12px 0; min-height: 48px; }
+  .region > .label { position: absolute; top: -9px; left: 8px; padding: 0 4px; background: var(--paper); font-size: 11px; color: var(--mid); text-transform: uppercase; letter-spacing: .05em; }
+  .region button, .region a { font: inherit; color: var(--ink); border: 1px solid var(--ink); background: var(--fill); padding: 4px 10px; margin: 4px 4px 0 0; text-decoration: none; display: inline-block; cursor: pointer; }
+  .region td a { border: 0; background: none; padding: 0; margin: 0; text-decoration: underline; font-weight: bold; }
+  .region label { display: block; margin-top: 8px; }
+  .region input, .region select { font: inherit; border: 1px solid var(--line); padding: 4px; width: 100%; max-width: 320px; }
+  .placeholder { min-height: 40px; margin: 6px 0; background: repeating-linear-gradient(45deg, var(--fill), var(--fill) 6px, var(--paper) 6px, var(--paper) 12px); }
+  .muted { color: var(--mid); }
+  .fielderr { font-size: 12px; margin: 4px 0 0; }
+  .badge { display: inline-block; border: 2px solid var(--ink); padding: 0 6px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: .05em; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .stat { border: 1px solid var(--line); padding: 8px; }
+  .stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mid); }
+  .stat .v { font-size: 20px; font-weight: bold; }
+  .page-header { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .page-header h1 { font-size: 18px; margin: 0; flex: 1 1 200px; min-width: 0; }
+  .page-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .page-actions button { margin: 0; }
+  .page-actions label { margin: 0; display: flex; gap: 6px; align-items: center; }
+  .page-actions select { width: auto; }
+  .meta { color: var(--mid); margin: 8px 0 0; flex: 1 1 100%; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mid); border-bottom: 2px solid var(--ink); }
+  tfoot td { font-weight: bold; border-top: 2px solid var(--ink); }
+  /* REQUIRED — layout floor 320 px -> 480 px breakpoint. Narrow the window to verify it. */
+  @media (max-width: 480px) {
+    .app-header nav, .app-header .signout { display: none; }
+    .menu-trigger { display: inline-block; }
+    .page-header { flex-direction: column; }
+    .page-actions { width: 100%; flex-direction: column; align-items: stretch; }
+    table, tbody, tfoot, tr, td { display: block; }
+    thead { display: none; }
+    tr { border-bottom: 2px solid var(--ink); padding: 8px 0; }
+    td { border: 0; padding: 2px 0; }
+    td::before { content: attr(data-th) ": "; color: var(--mid); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    td.actions::before { content: ""; }
+  }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .wf-footer { padding: 8px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--mid); }
+</style>
+</head>
+<body>
+<header class="wf-header">
+  <strong>S-01 — My Usage</strong> &middot; Serves S5.1, S5.2, S8.1, S8.2, S8.3 &middot; Entry: sign-in landing (<code>/</code>); "My usage" nav link &middot; <span class="muted">Shown here with an admin's nav; a non-admin sees only "My usage" (S8.2).</span>
+</header>
+
+<div class="switcher" role="group" aria-label="Screen state">
+  <button type="button" data-state="loading" aria-pressed="false">Loading</button>
+  <button type="button" data-state="empty" aria-pressed="false">Empty</button>
+  <button type="button" data-state="error" aria-pressed="false">Error</button>
+  <button type="button" data-state="populated" aria-pressed="true">Populated</button>
+</div>
+
+<div class="chrome"><span class="clabel">App header</span>
+  <header class="app-header">
+    <span class="brand">PeakMedia Gateway</span>
+    <nav aria-label="Primary">
+      <a href="S-01-my-usage.html" aria-current="page">My usage</a>
+      <a href="S-02-usage.html">Usage</a>
+      <a href="S-04-cache.html">Cache</a>
+    </nav>
+    <span class="spacer"></span>
+    <button type="button" class="menu-trigger" aria-label="Open menu">&#8801;</button>
+    <span class="who signout">admin@example.com</span>
+    <button type="button" class="signout" onclick="location.href='S-06-signed-out.html'">Sign out</button>
+  </header>
+</div>
+
+<main>
+  <section class="state" id="state-loading" aria-label="Loading state">
+    <div class="region" data-component="PageHeader"><span class="label">Page header</span>
+      <div class="page-header">
+        <h1>My usage</h1>
+        <div class="page-actions"><label>Month <select aria-label="Month"><option>2026-11</option><option>2026-10</option><option>2026-09</option></select></label></div>
+      </div>
+    </div>
+    <div class="region" data-component="Card"><span class="label">Usage figures — loading</span>
+      <p class="muted" role="status">Loading your usage…</p>
+      <div class="placeholder"></div><div class="placeholder"></div>
+    </div>
+  </section>
+
+  <section class="state" id="state-empty" aria-label="Empty state">
+    <div class="region" data-component="PageHeader"><span class="label">Page header</span>
+      <div class="page-header">
+        <h1>My usage</h1>
+        <div class="page-actions"><label>Month <select aria-label="Month"><option>2026-11</option><option>2026-10</option><option>2026-09</option></select></label></div>
+        <p class="meta">2026-11 · resets 2026-12-01 00:00 UTC</p>
+      </div>
+    </div>
+    <div class="region" data-component="Card"><span class="label">Usage figures — empty</span>
+      <p><strong>No usage in 2026-11</strong></p>
+      <p class="muted">Narration you request through the peak-media tools in Claude Code appears here. Your quota is $25.00 for the month.</p>
+      <button type="button">Go to current month</button>
+    </div>
+  </section>
+
+  <section class="state" id="state-error" aria-label="Error state">
+    <div class="region" data-component="PageHeader"><span class="label">Page header</span>
+      <div class="page-header">
+        <h1>My usage</h1>
+        <div class="page-actions"><label>Month <select aria-label="Month"><option>2026-11</option><option>2026-10</option><option>2026-09</option></select></label></div>
+      </div>
+    </div>
+    <div class="region" data-component="Toast"><span class="label">Usage figures — error</span>
+      <p role="alert">Couldn't load your usage. Check your connection and try again.</p>
+      <button type="button">Retry</button>
+    </div>
+  </section>
+
+  <section class="state active" id="state-populated" aria-label="Populated state">
+    <div class="region" data-component="PageHeader"><span class="label">Page header</span>
+      <div class="page-header">
+        <h1>My usage</h1>
+        <div class="page-actions"><label>Month <select aria-label="Month"><option>2026-11</option><option>2026-10</option><option>2026-09</option></select></label></div>
+        <p class="meta">2026-11 · resets 2026-12-01 00:00 UTC</p>
+      </div>
+    </div>
+    <div class="region" data-component="Toast"><span class="label">Over-quota notice — shown only when spent ≥ quota</span>
+      <p role="status"><span class="badge">Over</span> You have reached your monthly quota ($25.32 of $25.00). Narration is paused until 2026-12-01 00:00 UTC. Ask an administrator to raise your quota.</p>
+    </div>
+    <div class="region" data-component="Card"><span class="label">Usage figures</span>
+      <div class="stats">
+        <div class="stat"><div class="k">Spent</div><div class="v">$25.32</div></div>
+        <div class="stat"><div class="k">Quota</div><div class="v">$25.00</div></div>
+        <div class="stat"><div class="k">Remaining</div><div class="v">$0.00</div></div>
+        <div class="stat"><div class="k">Clips synthesized</div><div class="v">418</div></div>
+        <div class="stat"><div class="k">Cache hits</div><div class="v">95</div></div>
+        <div class="stat"><div class="k">Resets</div><div class="v">2026-12-01 00:00 UTC</div></div>
+      </div>
+      <p class="muted" style="font-size: 12px;">Same figures the my_usage tool returns. Amounts in US dollars; dates in UTC.</p>
+    </div>
+  </section>
+</main>
+
+<div class="chrome"><span class="clabel">App footer</span>
+  <footer class="app-footer">PeakMediaRemoteMcpServer v0.1.0</footer>
+</div>
+
+<footer class="wf-footer">
+  ConOps steps: S5.1, S5.2, S8.1, S8.2, S8.3 &middot; Links to: S-02 Usage, S-04 Cache (admins), S-06 Signed Out &middot;
+  Narrow the window below 480 px to see the 320 px layout. &middot;
+  Low-fidelity planning wireframe — no visual design implied.
+</footer>
+
+<script>
+  // The only script on the page: toggles which state section is visible.
+  var buttons = document.querySelectorAll('.switcher button');
+  function show(name) {
+    document.querySelectorAll('.state').forEach(function (s) { s.classList.toggle('active', s.id === 'state-' + name); });
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.state === name)); });
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { show(b.dataset.state); }); });
+</script>
+</body>
+</html>

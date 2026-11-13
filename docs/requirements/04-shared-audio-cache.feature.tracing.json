@@ -1,0 +1,96 @@
+{
+  "feature_id": "04",
+  "feature_file": "04-shared-audio-cache.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-04-lRsfqBV",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "The gateway's shared cache uses the same SHA-256 key as the skills' local cache, so file names stay compatible."}],
+        "conops": [{"scenario": "S2", "step": 5, "paraphrase": "For each clip the gateway computes the cache key before deciding between a hit and a synthesis."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-csNgnyQ",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "One cache serves all users, so a clip one person bought is free to everyone else."}],
+        "conops": [{"scenario": "S2", "step": 5, "paraphrase": "A cache hit is recorded at zero cost, whichever person originally synthesized the clip."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-2qCsalR",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G2 says a re-run of an unchanged spine makes no OpenRouter calls and adds nothing to the caller's spend."}],
+        "conops": [{"scenario": "S3", "step": 1, "paraphrase": "The user re-runs the spine with the same model, voice, style and texts."}, {"scenario": "S3", "step": 4, "paraphrase": "The result reads that every clip was cached and that the call cost nothing."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-TgW6vsE",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "The cache is keyed on model, voice, style and text together, so any change to one of them produces a new clip."}],
+        "conops": [{"scenario": "S2", "step": 5, "paraphrase": "A clip whose inputs differ from every cached clip is a miss and is synthesized."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-PXIafcT",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "Each clip is cached as soon as it is made, so a retry after a failure pays only for clips still missing."}],
+        "conops": [{"scenario": "S7", "step": 4, "paraphrase": "A retry of the same request after a failure finds the finished clips cached and synthesizes only the rest."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-DYooFQF",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "Download URLs are reusable for 15 minutes, so the client can fetch a clip more than once within that window."}],
+        "conops": [{"scenario": "S2", "step": 8, "paraphrase": "The client downloads each clip from its URL into the local cache."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-bIGlR3O",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "An expired download URL is refused, and the refusal tells the caller how to get a fresh link."}],
+        "conops": [{"scenario": "S2", "step": 9, "paraphrase": "A download of an expired URL is answered with a gone status that tells the caller to call the tool again."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-xYMUNYV",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "An expired URL is renewed by calling the tool again, which is a free cache hit."}],
+        "conops": [{"scenario": "S2", "step": 9, "paraphrase": "The repeat call after an expired link is all cache hits and costs nothing."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-SqAxPKp",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "Download URLs are unguessable per-clip tokens, so the URL reveals nothing about the cache key or other callers' clips."}],
+        "conops": [{"scenario": "S2", "step": 8, "paraphrase": "The URL the client downloads from is the only handle it gets, and it cannot be derived from the clip's cache key."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-SGh52Vj",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "The cache has a size cap, and the least-recently-used clips are evicted when it is exceeded."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The cache row of the functional summary requires least-recently-used eviction at the configured size cap."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-04-rYFhU7O",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: shared audio cache", "paraphrase": "A cache hit refreshes the clip's last-used time, so clips in active use are not evicted first."}],
+        "conops": [{"scenario": "S3", "step": 2, "paraphrase": "Every cache hit has its last-used time refreshed as it is recorded."}],
+        "claude_md": []
+      }
+    }
+  ],
+  "coverage_gaps": []
+}

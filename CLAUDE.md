@@ -22,7 +22,7 @@ toolchain-table row "C# / .NET", with conventions taken from the Bitbucket repo)
 - **Q1 Same information on another device:** not asked (Hybrid — service + stdio)
 - **Q2 Sign-in, or others see the data:** yes — callers must identify themselves before spending the shared OpenRouter credit ("McpAuth with Okta like the bitbucket one")
   - **Sign-in:** Okta (named provider) — org-only (the organization's Okta tenant)
-  - **Roles:** no — every signed-in caller can use every tool; limits are per-user quotas, not roles
+  - **Roles:** yes — `admin` (OIDC `groups` claim contains `Admin:Group`) and `user`; the admin role exists only in the usage dashboard (all users' usage, quota edits, cache stats). Every MCP tool behaves the same for every signed-in caller; limits are per-user monthly USD quotas. *(Changed by `/peak-workflow:discover` 2026-11-12: was "no".)*
   - **Access rule:** owner-or-permitted-role
 - **Q3 File attachments:** no
 - **Q4 Updates on screen without the person acting:** yes — live progress updates while long narration renders (MCP progress notifications)
@@ -37,7 +37,8 @@ toolchain-table row "C# / .NET", with conventions taken from the Bitbucket repo)
 | Stdio server | `src/PeakMediaMcpServer/` — console app, MCP stdio transport, user's own OpenRouter key, no database |
 | Shared tools | `src/PeakMediaMcpTools/` — MCP tools + OpenRouter client |
 | MCP SDK | `ModelContextProtocol`, `ModelContextProtocol.AspNetCore` |
-| Caller auth | `McpAuth` OAuth 2.1 resource-server gate (`Microsoft.AspNetCore.Authentication.JwtBearer`), Okta as issuer, org-only |
+| Caller auth | `McpAuth` OAuth 2.1 resource-server gate + **Broker** ported from BitbucketMcpServers: the gateway is its own authorization server (DCR on, PKCE), delegating sign-in to any OIDC provider — Okta in practice, no custom authorization server needed; org-only via Okta app assignment; OIDC client secret from `Broker__UpstreamClientSecret`. Chosen in discovery 2026-11-12 because the launch customer's Okta capabilities are unknown |
+| Usage dashboard | Blazor (Interactive Server render mode) inside `PeakMediaRemoteMcpServer`, built with Blazor Blueprint UI (`BlazorBlueprint.Components` v4 + `BlazorBlueprint.Icons.Lucide`; see UX Baseline), OIDC cookie session through the same provider; **My usage** for everyone, **Usage / User detail / Cache** for admins. Built last, after narration and quotas |
 | Upstream | OpenRouter (`POST https://openrouter.ai/api/v1/audio/speech`), shared key from env var `OpenRouter__ApiKey` (gateway) / `PEAK_MEDIA_OPENROUTER_API_KEY` (stdio) |
 | Database | SQLite via `Microsoft.Data.Sqlite`, gateway only — `Storage:DatabasePath` default `data/peakmedia.db`: per-user usage log, per-user quotas, audio cache |
 | Error handling | FluentResults |
@@ -85,7 +86,7 @@ ensure at least one TOR exists per active line, written in the form appropriate 
 declared mechanism. Lines marked `N/A` are skipped. Project type and Version single source
 of truth are declarations, not TOR sources.
 
-**Project type:** Hybrid — Service or API (`PeakMediaRemoteMcpServer`, HTTP) + CLI tool (`PeakMediaMcpServer`, stdio console app)
+**Project type:** Hybrid — Service or API (`PeakMediaRemoteMcpServer`, HTTP, with a small Blazor usage dashboard) + CLI tool (`PeakMediaMcpServer`, stdio console app)
 
 **Version exposure:**
 - HTTP server: GET `/version` returning JSON `{name, version}`, reachable without signing in; the MCP initialize handshake's `serverInfo.version` carries the same value.
@@ -116,6 +117,93 @@ The HTTP server logs to stderr and the file, never stdout.
 - MCP tool results: `ERROR: <problem>. <next action>` built with `ToolErrorFormatter.Format(...)` — never echo `ex.Message`. Example: `ERROR: daily quota of 50,000 characters reached. Try again after 00:00 UTC or ask an administrator to raise your quota.`
 - Non-MCP HTTP endpoints: an RFC 9457 problem-details body, e.g. `{"title": "Unauthorized", "status": 401, "detail": "No valid Okta token. Sign in again from your MCP client."}`
 - Stdio startup: stderr, e.g. `Error: PEAK_MEDIA_OPENROUTER_API_KEY is not set. Export your OpenRouter key and restart.`
+
+## UX Baseline
+
+This section declares the interaction conventions every screen must meet. It covers UX, not
+visual style. Each line marked TOR is a baseline TOR requirement source —
+`/peak-workflow:capture-requirements` ensures at least one TOR exists per active line, and
+`/peak-workflow:wrapup-epic` checks every line on each UI epic. Lines marked `N/A` are skipped.
+Error-message wording is governed by the `Error message standard` line in Tool Hygiene &
+Operability and is not repeated here. The screens are the gateway's usage dashboard
+(`docs/product-vision-planning/ux/screens.md`).
+
+**Design system:** Blazor Blueprint UI (`BlazorBlueprint.Components` v4, Apache-2.0 —
+https://github.com/blazorblueprintui/ui) with `BlazorBlueprint.Icons.Lucide` (declaration —
+installed by the walking skeleton, not a TOR)
+- Render mode: **Interactive Server**. Blazor Blueprint components need an interactive render mode
+  (they do not work under static SSR); set it on `Routes` so layout, nav and overlays are all
+  interactive. No WebAssembly project.
+- Setup: `builder.Services.AddBlazorBlueprintComponents()` in `Program.cs`; `@using
+  BlazorBlueprint.Components` and `@using BlazorBlueprint.Primitives` in `_Imports.razor`;
+  `<BbPortalHost />` in the root layout (dialogs and sheets need it).
+- Tokens: shadcn-compatible `:root` / `.dark` CSS variables in
+  `src/PeakMediaRemoteMcpServer/wwwroot/theme.css`, loaded in `App.razor` **before**
+  `_content/BlazorBlueprint.Components/blazorblueprint.css`. Pre-built CSS — no Tailwind, Node.js
+  or front-end build step.
+- `--radius` is the single radius knob. Base color: neutral.
+- Dark mode: `.dark` class on `<html>`, applied before first paint by
+  `_content/BlazorBlueprint.Components/js/theme-init.js`; light / dark / system through the
+  library's dark-mode toggle.
+- New semantic colors: define `--x` / `--x-foreground` in `:root` and `.dark` in `theme.css`.
+- Never copy or edit the library's CSS or components; compose through component parameters and
+  `Class`. App-specific styles go in `wwwroot/app.css`, after the library CSS.
+- Icons: Lucide only (`BlazorBlueprint.Icons.Lucide`); do not mix icon packages.
+
+**Blazor Blueprint tooling:** the `blazorblueprint` MCP server is this project's source of truth
+for the component library's API. It is registered at **project scope** in the committed
+`.mcp.json` at the repo root, so everyone who opens the repository in Claude Code gets it.
+- First use on a machine (needs Node.js for `npx`): Claude Code asks to approve the project's
+  `blazorblueprint` server — approve it. Check with `claude mcp get blazorblueprint` (expect
+  `Status: ✔ Connected`); at the start of a UI epic, run that check first.
+- To re-create the entry: `claude mcp add blazorblueprint --scope project --transport stdio --
+  npx -y @blazorblueprint/mcp`. Keep `.mcp.json` free of secrets — it is tracked.
+- Use it for **every** task that adds or changes a dashboard component (`Bb*` components,
+  icons, theming): look the component up through the server's tools **before** writing markup —
+  its parameters, events, required providers (`<BbPortalHost />`), and a usage example — and
+  again when a build error or a runtime exception names a Blazor Blueprint type.
+- Never write a `Bb*` component, parameter, or icon name from memory; the library is at v4 and
+  its API has changed between major versions. If the server is not connected, say so and read the
+  library's llms.txt (linked from https://github.com/blazorblueprintui/ui) instead of guessing.
+- The server answers *how the library works*; the UX Baseline, the design tokens in `theme.css`,
+  and the wireframes in `docs/product-vision-planning/ux/` decide *what the screen does* and take
+  precedence over its examples.
+
+**Screen states:** (TOR) Every data-bearing screen renders explicit loading, empty, error, and
+populated states, each distinguishable by visible text. (WCAG 2.2 SC 4.1.3)
+
+**Keyboard & focus:** (TOR) Every interactive control is reachable and operable by keyboard
+alone with no keyboard trap; the focused control always shows a visible focus indicator that is
+not hidden behind sticky UI; modal dialogs move focus inside on open, keep Tab within, and
+return focus to the invoking control on close. (WCAG 2.2 SC 2.1.1, 2.1.2, 2.4.3, 2.4.7, 2.4.11)
+
+**Forms:** (TOR) Every form field has a programmatically associated label; every validation
+error is shown in text next to the field naming the problem and the fix; focus moves to the
+first invalid field on a failed submission. (WCAG 2.2 SC 1.3.1, 3.3.1, 3.3.2, 3.3.3)
+
+**Destructive actions:** (TOR) Every irreversible action requires an explicit confirmation whose
+safe option is the default and is triggered by Escape. (WCAG 2.2 SC 3.3.4)
+
+**Progress feedback:** (TOR) Any operation longer than 1 second shows a visible progress
+indicator within 1 second; any operation longer than 10 seconds can be cancelled.
+(WCAG 2.2 SC 4.1.3)
+
+**Layout floor:** (TOR) Every screen is usable at 320 CSS px width and at 200% zoom with no
+horizontal scrolling, overlap, or clipped controls. (WCAG 2.2 SC 1.4.10, 1.4.4)
+
+**Contrast:** (TOR) Body text has a contrast ratio of at least 4.5:1 (3:1 for large text);
+control boundaries and focus indicators at least 3:1 against adjacent colors.
+(WCAG 2.2 SC 1.4.3, 1.4.11)
+
+**Reduced motion:** (TOR) When the OS reduce-motion preference is set, non-essential animation
+is disabled or replaced by an instant transition. (WCAG 2.2 SC 2.3.3, 2.2.2)
+
+**Navigation:** (TOR) Every screen has a unique page or window title, a single visible H1
+matching it, and a primary navigation whose current item is marked. (WCAG 2.2 SC 2.4.2, 2.4.6, 3.2.3)
+
+**Responsiveness budget:** N/A
+
+**Undo:** N/A
 
 ## Security Baseline
 
@@ -161,7 +249,7 @@ touches user data.
 **Project-specific:**
 - The gateway refuses to start when `McpAuth:Enabled` is false — unlike Bitbucket, there is no
   anonymous mode, because an open gateway spends the shared OpenRouter credit for anyone. Tests
-  mint tokens with the stub JWT issuer; the real Okta round-trip is verified by hand.
+  mint tokens with the stub JWT issuer; the real Okta round-trip is verified by hand against a free Okta developer (Integrator) org.
 - `appsettings*.json` is tracked and holds only non-secret values (model, default voice, `McpAuth`
   issuer/resource URIs, `Storage:*`). The OpenRouter key arrives only through `OpenRouter__ApiKey`;
   the gateway refuses to start without it.
@@ -180,6 +268,10 @@ Commands: `/peak-workflow:discover`, `/peak-workflow:mockup`, `/peak-workflow:ca
 `/peak-workflow:quick-fix <issue|description>`, `/peak-workflow:refresh-docs`, `/peak-workflow:status`,
 `/peak-workflow:setup`, `/peak-workflow:upgrade`, `/peak-workflow:new-project`
 
+**Recommended skills (at setup):** `frontend-design@claude-plugins-official` (installed),
+`playwright-cli` (installed). Each UI epic invokes the installed design skills in its Design pass; the UX
+Baseline and the design-system tokens take precedence over their choices.
+
 ## Verification & Quality Gates
 
 **Test directories:** tests/
@@ -190,6 +282,7 @@ Run every applicable check before marking an epic Implemented or Complete:
 - **Tests:** `python build.py test` (tests/)
 - **Lint / format:** `dotnet format PeakMediaMcpServers.sln --verify-no-changes`
 - **Run the tool:** `python build.py start` then `curl http://localhost:5108/version` → `{"name":"PeakMediaRemoteMcpServer","version":"<semver>"}` and `python build.py mcp tools` lists the tools; stdio: `dotnet run --project src/PeakMediaMcpServer -- --version` → `PeakMediaMcpServer v<semver>`, exit 0
+- **Visual / console (UI only):** `playwright-cli` against the running dashboard (`python build.py start`, then `http://localhost:5108/`), signed in through the stub issuer's test helper
 
 ## Important Reminders
 
@@ -202,6 +295,9 @@ Run every applicable check before marking an epic Implemented or Complete:
   as in Bitbucket — that fallback does not survive a restart.
 - Tests never call real OpenRouter or real Okta — use `tests/Fakes/` and the stub JWT issuer.
 - Image generation is a growth note only — do not build it until it is planned as an epic.
+- Dashboard work: look every Blazor Blueprint UI component up through the `blazorblueprint` MCP
+  server before using it (see UX Baseline → Blazor Blueprint tooling); never write `Bb*` markup
+  from memory.
 
 ### C# Coding Conventions (from BitbucketMcpServers)
 
@@ -225,6 +321,9 @@ Run every applicable check before marking an epic Implemented or Complete:
 - `~/github/peakflames/claude-plugins-peakflames/plugins/peak-media/skills` — the client skills
   (`web2video`, `plate-factory`, `video-spine`); `video-spine/references/voices.md` and
   `video-spine/scripts/spine.mjs` show today's direct OpenRouter TTS calls this gateway replaces.
+
+- https://github.com/blazorblueprintui/ui — Blazor Blueprint UI, the dashboard's component library
+  (docs, llms.txt, MCP server `@blazorblueprint/mcp`, `dotnet new blazorblueprint` template).
 
 ## Git Workflow
 

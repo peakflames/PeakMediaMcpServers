@@ -1,0 +1,200 @@
+{
+  "feature_id": "03",
+  "feature_file": "03-narration.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-03-Vaata1w",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "list_voices reports the allowed models with their voices, defaults and style support, which the vision names as part of the tool contract."}],
+        "conops": [{"scenario": "S2", "step": 2, "paraphrase": "Claude checks once with list_voices that the chosen model and voice are allowed before narrating."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-nt9zDad",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "Validation before any spend refuses an unknown model with an ERROR that names the fix."}],
+        "conops": [{"scenario": "S2", "step": 4, "paraphrase": "The gateway validates the model is allowed before any clip is synthesized."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-mPpT1yR",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "Validation before any spend refuses a voice the model does not have, with an ERROR naming the fix."}],
+        "conops": [{"scenario": "S2", "step": 4, "paraphrase": "The gateway checks the voice is known before any clip is synthesized."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-HLJlVSo",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "Voice names are matched case-insensitively so a skill's spelling does not cause a needless refusal."}],
+        "conops": [{"scenario": "S2", "step": 3, "paraphrase": "Claude passes the house voice name in the synthesize call, which must be accepted as written in any case."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-IcVxy00",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "A call containing a clip with no text is refused before any spend, with an ERROR naming the clip."}],
+        "conops": [{"scenario": "S2", "step": 4, "paraphrase": "The gateway checks each clip's length bounds before any clip is synthesized."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-eyAaGVV",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "A call with more than 40 clips is refused before any spend, with an ERROR naming the limit and how to split."}],
+        "conops": [{"scenario": "S2", "step": 4, "paraphrase": "The gateway enforces the 1 to 40 clips per call limit before any clip is synthesized."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-LeqCLZu",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "A clip over 4,000 characters is refused before any spend, with an ERROR naming the clip and the fix."}],
+        "conops": [{"scenario": "S2", "step": 4, "paraphrase": "The gateway enforces the per-clip character limit before any clip is synthesized."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-9ruVWBA",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "The limits of 40 clips and 4,000 characters are the documented maximums, so a call exactly at them must succeed."}],
+        "conops": [{"scenario": "S2", "step": 4, "paraphrase": "The per-call limits are inclusive, so a call at the boundary is accepted."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-uMFP7Oc",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The test model fake/tone is accepted only by the stdio server and must be refused by the gateway, so it cannot spend real credit."}],
+        "conops": [{"scenario": "S6", "step": 7, "paraphrase": "The gateway refuses the fake test model, while the stdio server accepts it for offline style testing."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-IyOofVh",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G1 requires a signed-in user with no personal key to get a full spine of clips from the gateway."}],
+        "conops": [{"scenario": "S2", "step": 3, "paraphrase": "Claude calls synthesize_narration with the whole spine and the caller holds no OpenRouter key."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-E04hqrD",
+      "traces_to": {
+        "vision": [{"section": "§9 — Design Direction", "paraphrase": "Tool results pair a human summary with one fenced JSON block holding the per-clip fields that the skill scripts read."}],
+        "conops": [{"scenario": "S2", "step": 7, "paraphrase": "The result carries a fenced JSON block with the per-clip fields the skill needs."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-RevSWV4",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "The result summary states the call's cost, cached count and median wpm, so the user sees what the call did."}],
+        "conops": [{"scenario": "S2", "step": 7, "paraphrase": "The markdown part of the result gives a one-line summary of clips, cached count, cost and median wpm."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-J5FXU3j",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G5 keeps audio out of the model's context, so the tool result carries only metadata and URLs."}],
+        "conops": [{"scenario": "S2", "step": 7, "paraphrase": "The result carries per-clip metadata and URLs rather than audio bytes."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-ehw1xk6",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G4 requires one progress notification per clip during a long spine call, visible in Claude Code."}],
+        "conops": [{"scenario": "S2", "step": 6, "paraphrase": "After each clip the gateway sends a progress notification that Claude Code shows to the user."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-eKeTzs6",
+      "traces_to": {
+        "vision": [{"section": "§10 — Data Strategy", "paraphrase": "Audio comes from OpenRouter as 16-bit mono 24 kHz PCM and is wrapped in a WAV header before it is cached."}],
+        "conops": [{"scenario": "S2", "step": 5, "paraphrase": "On a miss the gateway wraps the returned PCM in a WAV header before storing it."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-0gjBH7R",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "The per-clip word count and wpm measure spoken words, so mood tags are excluded from the count."}],
+        "conops": [{"scenario": "S2", "step": 7, "paraphrase": "The per-clip words and wpm reported in the result must describe the spoken text."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-SVUzauN",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "The result summary warns about slow clips below 70% of the median wpm, which usually means a mood tag was read aloud."}],
+        "conops": [{"scenario": "S2", "step": 7, "paraphrase": "The result's markdown includes any slow-clip warning alongside the summary line."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-UYCubxo",
+      "traces_to": {
+        "vision": [{"section": "§10 — Data Strategy", "paraphrase": "Each uncached clip is requested from OpenRouter's speech endpoint in PCM format, which the data strategy names as the audio source."}],
+        "conops": [{"scenario": "S2", "step": 5, "paraphrase": "On a cache miss the gateway calls OpenRouter with PCM output and zero data retention."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-Ah5Slpu",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "The style is an instruction for Gemini voices and is not sent to MAI voices, which the vision's model-specific behavior implies."}],
+        "conops": [{"scenario": "S2", "step": 3, "paraphrase": "The house style is part of the synthesize call, and it applies only where the model accepts it."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-JKfDgpt",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "Each clip may carry its own optional style, and that clip style overrides the call-level style."}],
+        "conops": [{"scenario": "S2", "step": 3, "paraphrase": "The clips in the call carry the spine's text, and a per-clip style is honored within the same call."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-u0NLjMV",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "Each clip gets one automatic retry on a timeout or 5xx answer before the call fails."}],
+        "conops": [{"scenario": "S7", "step": 2, "paraphrase": "A timed-out clip is retried once by the gateway before the call gives up."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-5607RO5",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "When a clip still fails after its retry, the call fails with an ERROR that names the clip, and finished clips stay saved."}],
+        "conops": [{"scenario": "S7", "step": 3, "paraphrase": "The call returns an error naming the failed clip and saying that the clips already made are saved."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-FQcysYo",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "Only timeouts and 5xx answers are retried, so an out-of-credit answer is reported at once without a second attempt."}],
+        "conops": [{"scenario": "S7", "step": 5, "paraphrase": "A 402 from OpenRouter is not retried and returns an ERROR asking an administrator to add credit."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-03-A312w2t",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Keys must never appear in messages or logs, so a rejected key is reported without revealing it."}],
+        "conops": [{"scenario": "S7", "step": 6, "paraphrase": "A 401 from OpenRouter returns an ERROR asking an administrator to check the key, and the key never appears in the message."}],
+        "claude_md": []
+      }
+    }
+  ],
+  "coverage_gaps": []
+}

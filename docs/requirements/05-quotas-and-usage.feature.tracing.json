@@ -1,0 +1,123 @@
+{
+  "feature_id": "05",
+  "feature_file": "05-quotas-and-usage.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-05-MUV56KT",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "Spend is charged at the real cost OpenRouter reports for each clip, not an estimate."}],
+        "conops": [{"scenario": "S2", "step": 5, "paraphrase": "On each miss the gateway reads the real cost of the clip and records a usage row."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-dFazrDm",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "If the reported cost cannot be read, the clip is charged from the configured model price, so spend is never left unrecorded."}],
+        "conops": [{"scenario": "§8", "step": null, "paraphrase": "The cost constraint says that when real cost cannot be read, the clip is charged from the configured price and a warning is logged."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-DIrxTPy",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "Clips already made stay cached and charged when a later clip fails, so the caller pays only for audio they received."}],
+        "conops": [{"scenario": "S7", "step": 1, "paraphrase": "Clips synthesized before a failure are cached and charged to the caller."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-3JuMxwL",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "Every caller without an override gets the default monthly quota of $25 from configuration."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The usage and quota table gives every user a monthly USD quota with a $25 default on a UTC calendar month."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-3cXUiMQ",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "A call that starts under quota runs to completion, and the result notes when the caller is now over quota."}],
+        "conops": [
+          {"scenario": "S4", "step": 2, "paraphrase": "A call that starts under the quota completes, and the result notes the caller is now over their monthly quota."},
+          {"scenario": "§8", "step": null, "paraphrase": "The quota timing assumption checks the quota at call start and lets a call finish even if it ends over."}
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-N0KTSFQ",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "Once spend reaches the quota, later calls are refused until the next UTC month, with an ERROR naming spend, quota and reset."}],
+        "conops": [{"scenario": "S4", "step": 3, "paraphrase": "The gateway refuses the next call before any synthesis and names the spend, quota and reset time."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-HqJn98D",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "Reaching the quota exactly counts as reached, so the refusal applies at equality as well as above it."}],
+        "conops": [{"scenario": "S4", "step": 3, "paraphrase": "The refusal applies once spend is at or above the quota, not only once it passes it."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-zi52cgw",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "The quota check applies per call, so an over-quota caller is refused even when every clip is already cached."}],
+        "conops": [{"scenario": "S4", "step": 4, "paraphrase": "A call whose clips are all cache hits is refused the same way because the quota gate is per call."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-efm0UOd",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "Spend is counted per calendar month in UTC, so the quota resets at 00:00 UTC on the first."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The usage and quota table defines the quota period as the UTC calendar month."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-babYeNE",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G8 requires an admin's quota change to apply to that user's next call."}],
+        "conops": [{"scenario": "S5", "step": 6, "paraphrase": "After an admin raises a user's quota, that user's next synthesis call proceeds."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-bLVMjT4",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "my_usage reports month, spend, quota, remaining, clips, cache hits and reset date, so each caller knows where they stand."}],
+        "conops": [{"scenario": "S4", "step": 5, "paraphrase": "The user calls my_usage and sees the month, spend, quota, clip and cache-hit counts and the reset time."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-0pHv4Fb",
+      "traces_to": {
+        "vision": [{"section": "§9 — Design Direction", "paraphrase": "Money is shown in US dollars to the cent, so remaining amounts are quota minus spend at cent precision."}],
+        "conops": [{"scenario": "S4", "step": 5, "paraphrase": "My usage shows the remaining amount alongside spend and quota."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-WmxtWmi",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "Being over quota must not hide the caller's own usage, so my_usage still answers for an over-quota caller."}],
+        "conops": [{"scenario": "S4", "step": 5, "paraphrase": "An over-quota user can still call my_usage to see their figures."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-05-ryNGNXA",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: quotas and usage", "paraphrase": "Usage rows hold counts and the cache key only, and narration text is never stored or logged."}],
+        "conops": [{"scenario": "§8", "step": null, "paraphrase": "The privacy constraint says narration text is never stored or logged and usage rows hold only counts and keys."}],
+        "claude_md": []
+      }
+    }
+  ],
+  "coverage_gaps": []
+}

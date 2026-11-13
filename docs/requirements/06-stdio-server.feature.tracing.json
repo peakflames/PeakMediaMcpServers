@@ -1,0 +1,128 @@
+{
+  "feature_id": "06",
+  "feature_file": "06-stdio-server.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-06-WYyXusz",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The stdio server runs only with the user's own key, so it must stop at once and name the fix when that key is missing."}],
+        "conops": [{"scenario": "S6", "step": 2, "paraphrase": "With no key set the server writes the fix to stderr and exits with code 1."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-dX6DFFO",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The stdio server reads the legacy key variable, so existing users of the skills keep working unchanged."}],
+        "conops": [{"scenario": "S6", "step": 1, "paraphrase": "The solo user supplies their own OpenRouter key through an environment variable."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-ej048Ep",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "When both key variables are set, the current variable takes precedence over the legacy one."}],
+        "conops": [{"scenario": "S6", "step": 1, "paraphrase": "The solo user supplies their own OpenRouter key through an environment variable."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-emXCHe2",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The stdio server offers only the narration tools, with no usage or admin tools."}],
+        "conops": [{"scenario": "S6", "step": 3, "paraphrase": "The tool list for the solo user shows only the two narration tools."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-heFgF6C",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The stdio server writes WAVs straight into the local cache and returns their paths in place of URLs."}],
+        "conops": [{"scenario": "S6", "step": 5, "paraphrase": "Each clip is written into the local cache under its cache key and its path is returned instead of a URL."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-vtaQIaK",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The local cache location can be overridden, so the user chooses where clips are written."}],
+        "conops": [{"scenario": "S6", "step": 5, "paraphrase": "The cache location can be overridden through an environment variable."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-D8tj7pH",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The local cache is the stdio server's only state, so a clip already there must be served without a paid call."}],
+        "conops": [{"scenario": "S6", "step": 6, "paraphrase": "Files already in the local cache are found in place and no new synthesis happens."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-g9QibOG",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The stdio server accepts the fake test model for offline testing, producing audio without any OpenRouter call."}],
+        "conops": [{"scenario": "S6", "step": 7, "paraphrase": "The fake test model is accepted on the stdio server for style testing without any call to OpenRouter."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-UeA7aSw",
+      "traces_to": {
+        "vision": [{"section": "§10 — Data Strategy", "paraphrase": "Stdio synthesis requests use PCM output with zero data retention, the same as the gateway."}],
+        "conops": [{"scenario": "S6", "step": 4, "paraphrase": "The skill calls synthesize exactly as it does through the gateway, so the same OpenRouter request settings apply."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-i2lj5iF",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G4 requires one progress notification per clip on the stdio server too."}],
+        "conops": [{"scenario": "S6", "step": 4, "paraphrase": "The skill's synthesize call gets per-clip progress, as in the gateway flow."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-fTgpl4m",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Narration tools (gateway and stdio)", "paraphrase": "A clip gets one retry on timeout or 5xx before the call fails with an ERROR naming the clip."}],
+        "conops": [{"scenario": "S7", "step": 2, "paraphrase": "A failing clip is retried once before the call gives up."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-PY6kH1r",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G6 requires the stdio and gateway servers to expose identical arguments and result fields, differing only in url versus path."}, {"section": "§6 — MVP Scope Summary / Client integration contract", "paraphrase": "One stable tool contract lets the skill author use one code path for both servers."}],
+        "conops": [{"scenario": "S6", "step": 4, "paraphrase": "The skill calls the stdio server exactly as it calls the gateway, so one contract serves both."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-bPXmWnj",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G6 requires identical validation behavior, so invalid input gets the same ERROR text on both servers."}],
+        "conops": [{"scenario": "S6", "step": 4, "paraphrase": "The skill gets the same refusal for bad input from the stdio server as from the gateway."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-FXNq0Rx",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Stdio server", "paraphrase": "The stdio server's model list includes the fake test model alongside the real allowed models."}],
+        "conops": [{"scenario": "S6", "step": 7, "paraphrase": "The fake test model appears in list_voices on the stdio server only."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-06-GC17sBD",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Logs never contain narration text or keys, a cross-cutting rule the stdio server follows too."}],
+        "conops": [{"scenario": "§8", "step": null, "paraphrase": "The privacy constraint says narration text is never stored or logged."}],
+        "claude_md": []
+      }
+    }
+  ],
+  "coverage_gaps": []
+}
