@@ -21,6 +21,8 @@ global using PeakMediaRemoteMcpServer.Broker.Storage;
 global using PeakMediaRemoteMcpServer.Cache;
 global using PeakMediaRemoteMcpServer.Configuration;
 global using PeakMediaRemoteMcpServer.Storage;
+global using PeakMediaRemoteMcpServer.Tests.Narration;
+global using PeakMediaRemoteMcpServer.Usage;
 global using PeakMediaStubAuthorizationServer;
 global using PeakMediaTestFakes;
 global using PeakMediaTestSupport;

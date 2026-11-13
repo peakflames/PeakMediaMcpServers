@@ -40,11 +40,15 @@ public sealed class NarrationClient : IAsyncDisposable
 
     public string AccessToken { get; }
 
-    public static async Task<NarrationClient> StartAsync(string email = "pat@example.com", IDictionary<string, string?>? overrides = null)
+    /// <summary>
+    /// Starts the gateway and signs <paramref name="email"/> in. <paramref name="now"/> sets the gateway's
+    /// clock (cache, download links, usage month); sign-in tokens always use the real time.
+    /// </summary>
+    public static async Task<NarrationClient> StartAsync(string email = "pat@example.com", IDictionary<string, string?>? overrides = null, DateTimeOffset? now = null)
     {
         var stub = await StubOidcIssuer.StartAsync();
         var openRouter = await FakeOpenRouter.StartAsync();
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var clock = new FakeTimeProvider(now ?? DateTimeOffset.UtcNow);
         var host = await GatewayTestHost.StartAsync(stub, openRouter, services => services.AddSingleton<TimeProvider>(clock), overrides);
         var signedIn = await TestSignIn.SignInAsync(host.Client, stub, StubUser.For(email));
         return new NarrationClient(stub, openRouter, host, clock, signedIn.AccessToken);
@@ -65,6 +69,27 @@ public sealed class NarrationClient : IAsyncDisposable
     {
         var signedIn = await TestSignIn.SignInAsync(Host.Client, Stub, StubUser.For(email));
         return signedIn.AccessToken;
+    }
+
+    /// <summary>Signs another caller (e.g. one in the admin group) in to the same gateway and returns their access token.</summary>
+    public async Task<string> SignInAnotherAsync(StubUser user)
+    {
+        var signedIn = await TestSignIn.SignInAsync(Host.Client, Stub, user);
+        return signedIn.AccessToken;
+    }
+
+    /// <summary>Calls my_usage for the signed-in caller (or the caller of <paramref name="accessToken"/>).</summary>
+    public Task<ToolCall> MyUsageAsync(string? accessToken = null)
+    {
+        return CallToolAsync("my_usage", new Dictionary<string, object>(), accessToken: accessToken);
+    }
+
+    /// <summary>The <c>field | value</c> rows of a my_usage result.</summary>
+    public static IReadOnlyDictionary<string, string> UsageTable(string text)
+    {
+        return Regex.Matches(text, @"^\| ([^|]+?) \| ([^|]+?) \|\r?$", RegexOptions.Multiline)
+            .Where(m => m.Groups[1].Value != "field")
+            .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
     }
 
     public static object Clip(int n, string text, string? style = null, string? voice = null)
@@ -161,6 +186,21 @@ public sealed class NarrationClient : IAsyncDisposable
             [.. progressIndexes.Select(x => x.m.GetProperty("params"))],
             progressIndexes.All(x => x.i < resultIndex),
             raw);
+    }
+
+    /// <summary>The tools of a signed-in <c>tools/list</c>, as returned (name, description, input schema, …).</summary>
+    public async Task<IReadOnlyList<JsonElement>> ListToolsAsync(string? accessToken = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp")
+        {
+            Content = new StringContent("""{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}""", Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Accept.ParseAdd("application/json");
+        request.Headers.Accept.ParseAdd("text/event-stream");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken ?? AccessToken);
+        using var response = await Host.Client.SendAsync(request);
+        using var document = await TestSignIn.ReadJsonRpcAsync(response);
+        return [.. document.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray().Select(t => t.Clone())];
     }
 
     /// <summary>The tool names from a signed-in <c>tools/list</c>.</summary>

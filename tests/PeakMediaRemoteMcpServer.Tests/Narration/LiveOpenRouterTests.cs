@@ -53,6 +53,6 @@ public class LiveOpenRouterTests
         Assert.Equal(0m, again.GetProperty("costUsd").GetDecimal());
         Assert.Contains(
             second.Text.Split('\n').Select(l => l.TrimEnd('\r')),
-            l => l.StartsWith("1 clips · 1 cached · $0.0000 this call", StringComparison.Ordinal));
+            l => l.StartsWith("1 clips · 1 cached · $0.00 this call", StringComparison.Ordinal));
     }
 }

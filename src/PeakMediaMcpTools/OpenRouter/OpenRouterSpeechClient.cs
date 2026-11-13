@@ -10,7 +10,7 @@ public sealed record SpeechAudio(byte[] Pcm, string? GenerationId);
 /// </summary>
 public sealed class CostLookupSchedule(IReadOnlyList<TimeSpan> delays)
 {
-    /// <summary>0.5, 1, 2 and 4 s, then 8 s seven times — about 63.5 s before the cost is given up as 0.</summary>
+    /// <summary>0.5, 1, 2 and 4 s, then 8 s seven times — about 63.5 s before the cost is given up as unreadable.</summary>
     public static readonly CostLookupSchedule Default = FromMilliseconds([500, 1000, 2000, 4000, 8000, 8000, 8000, 8000, 8000, 8000, 8000]);
 
     public IReadOnlyList<TimeSpan> Delays { get; } = delays;
@@ -110,14 +110,14 @@ public sealed class OpenRouterSpeechClient(HttpClient http, CostLookupSchedule s
     /// <summary>
     /// What OpenRouter charged for a generation. Tries at once, then again after each delay of the
     /// <see cref="CostLookupSchedule"/> while the generation is not ready yet (404, 429, 5xx, or no
-    /// <c>total_cost</c>). Gives 0, with a warning, when it never appears.
+    /// <c>total_cost</c>). Gives null when it never appears; the caller then estimates the cost.
     /// </summary>
-    public async Task<decimal> LookUpCostAsync(string? generationId, CancellationToken cancellationToken)
+    public async Task<decimal?> LookUpCostAsync(string? generationId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(generationId))
         {
-            Log.Warning("OpenRouter returned no generation id; recording the clip's cost as 0");
-            return 0m;
+            Log.Debug("OpenRouter returned no generation id; the clip's cost cannot be read");
+            return null;
         }
 
         var outcome = "no answer";
@@ -141,8 +141,8 @@ public sealed class OpenRouterSpeechClient(HttpClient http, CostLookupSchedule s
             }
         }
 
-        Log.Warning("OpenRouter generation statistics were unavailable ({Outcome}); recording the clip's cost as 0", outcome);
-        return 0m;
+        Log.Debug("OpenRouter generation statistics were unavailable ({Outcome})", outcome);
+        return null;
     }
 
     private async Task<(decimal? Cost, bool Retry, string Seen)> TryLookUpCostAsync(string generationId, CancellationToken cancellationToken)

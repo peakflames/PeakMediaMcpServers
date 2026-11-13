@@ -12,70 +12,184 @@ public sealed record ClipResult(
     int SampleRate,
     string Url);
 
+/// <summary>A finished call: its clips in order, and the over-quota note when the call ended at or over quota.</summary>
+public sealed record NarrationRun(IReadOnlyList<ClipResult> Clips, string? QuotaNote);
+
 /// <summary>
-/// Runs a validated request clip by clip, in order: a cache hit costs nothing; a miss is synthesized,
-/// wrapped as WAV and stored at once, so clips finished before a failure stay cached. OpenRouter
-/// publishes a clip's cost only seconds later, so each clip's cost lookup runs in the background while
-/// the next clip synthesizes; clips are reported (one progress notification each) and returned strictly
-/// in order, each once its cost is known.
+/// Runs a validated request clip by clip, in order. The caller's monthly quota is checked first: a caller
+/// whose month-to-date spend has reached it is refused before any cache lookup or synthesis. Then a cache
+/// hit costs nothing (logged as a free hit); a miss is synthesized, wrapped as WAV and stored at once, so
+/// clips finished before a failure stay cached. OpenRouter publishes a clip's cost only seconds later, so
+/// each clip is charged (<see cref="ChargeAsync"/>) in the background while the next clip synthesizes;
+/// clips are reported (one progress notification each) and returned strictly in order, each once its cost
+/// is known. A call that fails or is cancelled part-way still charges every clip already synthesized.
+/// Narration text is never logged or stored — only its character count and cache key.
 /// </summary>
-public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient openRouter)
+public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient openRouter, IUsageLedger usage)
 {
-    public async Task<Result<IReadOnlyList<ClipResult>>> RunAsync(
+    public async Task<Result<NarrationRun>> RunAsync(
         ValidNarrationRequest request,
         IProgress<ProgressNotificationValue>? progress,
         CancellationToken cancellationToken)
     {
-        var total = request.Clips.Count;
-        var pending = new List<PendingClip>(total);
-        var results = new List<ClipResult>(total);
-        for (var i = 0; i < total; i++)
-        {
-            var clip = request.Clips[i];
-            var key = ClipCacheKey.For(request.Model.Id, clip.Voice, clip.Style, clip.Text);
-
-            var found = await clips.FindAsync(key, cancellationToken);
-            if (found.IsFailed)
-            {
-                return StorageFailure();
-            }
-
-            if (found.Value is { } hit)
-            {
-                pending.Add(new PendingClip(clip, key, hit.DurationMs, true, Task.FromResult(0m)));
-            }
-            else
-            {
-                var audio = await openRouter.SynthesizeAsync(request.Model, clip.Voice, clip.Style, clip.Text, cancellationToken);
-                if (audio.IsFailed)
-                {
-                    // Stop at the failing clip: later clips are never requested. Clips before it are saved.
-                    return Result.Fail<IReadOnlyList<ClipResult>>(SpeechFailure(audio.Errors[0], clip.N, i + 1, total, savedBefore: i));
-                }
-
-                var durationMs = WavAudio.DurationMs(audio.Value.Pcm.Length);
-                var saved = await clips.SaveAsync(key, WavAudio.FromPcm(audio.Value.Pcm), durationMs, cancellationToken);
-                if (saved.IsFailed)
-                {
-                    return StorageFailure();
-                }
-
-                var cost = openRouter.LookUpCostAsync(audio.Value.GenerationId, cancellationToken);
-                pending.Add(new PendingClip(clip, key, durationMs, false, cost));
-            }
-
-            if (!await ReportReadyAsync(pending, results, total, progress, waitForAll: false, cancellationToken))
-            {
-                return StorageFailure();
-            }
-        }
-
-        if (!await ReportReadyAsync(pending, results, total, progress, waitForAll: true, cancellationToken))
+        var before = await usage.GetStatusAsync(cancellationToken);
+        if (before.IsFailed)
         {
             return StorageFailure();
         }
 
-        return Result.Ok<IReadOnlyList<ClipResult>>(results);
+        if (before.Value.IsOverQuota)
+        {
+            return Result.Fail<NarrationRun>(QuotaRefusal(before.Value));
+        }
+
+        var total = request.Clips.Count;
+        var pending = new List<PendingClip>(total);
+        var results = new List<ClipResult>(total);
+        try
+        {
+            for (var i = 0; i < total; i++)
+            {
+                var clip = request.Clips[i];
+                var key = ClipCacheKey.For(request.Model.Id, clip.Voice, clip.Style, clip.Text);
+
+                var found = await clips.FindAsync(key, cancellationToken);
+                if (found.IsFailed)
+                {
+                    return await FailAfterChargingAsync(pending, StorageFailureText);
+                }
+
+                if (found.Value is { } hit)
+                {
+                    await RecordAsync(new UsageEntry(request.Model.Id, clip.Voice, clip.Text.Length, 0m, key, CacheHit: true));
+                    pending.Add(new PendingClip(clip, key, hit.DurationMs, true, Task.FromResult(0m)));
+                }
+                else
+                {
+                    var audio = await openRouter.SynthesizeAsync(request.Model, clip.Voice, clip.Style, clip.Text, cancellationToken);
+                    if (audio.IsFailed)
+                    {
+                        // Stop at the failing clip: later clips are never requested. Clips before it are saved and charged.
+                        return await FailAfterChargingAsync(pending, SpeechFailure(audio.Errors[0], clip.N, i + 1, total, savedBefore: i));
+                    }
+
+                    var durationMs = WavAudio.DurationMs(audio.Value.Pcm.Length);
+                    var saved = await clips.SaveAsync(key, WavAudio.FromPcm(audio.Value.Pcm), durationMs, cancellationToken);
+                    var cost = ChargeAsync(request.Model, clip, key, audio.Value.GenerationId, cancellationToken);
+                    pending.Add(new PendingClip(clip, key, durationMs, false, cost));
+                    if (saved.IsFailed)
+                    {
+                        return await FailAfterChargingAsync(pending, StorageFailureText);
+                    }
+                }
+
+                if (!await ReportReadyAsync(pending, results, total, progress, waitForAll: false, cancellationToken))
+                {
+                    return await FailAfterChargingAsync(pending, StorageFailureText);
+                }
+            }
+
+            if (!await ReportReadyAsync(pending, results, total, progress, waitForAll: true, cancellationToken))
+            {
+                return await FailAfterChargingAsync(pending, StorageFailureText);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The caller gave up: every clip already synthesized was paid for, so it is still charged.
+            await DrainAsync(pending);
+            throw;
+        }
+
+        var after = await usage.GetStatusAsync(CancellationToken.None);
+        string? note = null;
+        if (after.IsFailed)
+        {
+            Log.Warning("Usage could not be read after a narration call; the over-quota note was skipped");
+        }
+        else if (after.Value.IsOverQuota)
+        {
+            note = $"You are now over your monthly quota ({UsageText.Dollars(after.Value.Spent)} of {UsageText.Dollars(after.Value.Quota)}).";
+        }
+
+        return Result.Ok(new NarrationRun(results, note));
+    }
+
+    /// <summary>
+    /// The refusal for a caller whose month-to-date spend has reached their quota, naming the quota, the
+    /// spend and the reset time.
+    /// </summary>
+    public static string QuotaRefusal(UsageStatus status)
+    {
+        return ToolErrorFormatter.Format(
+            $"monthly quota of {UsageText.Dollars(status.Quota)} reached ({UsageText.Dollars(status.Spent)} spent this month)",
+            $"Try again after {UsageText.Utc(status.ResetsUtc)} or ask an administrator to raise your quota.");
+    }
+
+    /// <summary>
+    /// Charges one synthesized clip: the cost OpenRouter reports, or — when it cannot be read — the model's
+    /// configured price for the clip's characters, with a warning. The usage row is written even when the
+    /// call is cancelled meanwhile (the audio was already paid for); then the cancellation propagates.
+    /// </summary>
+    private async Task<decimal> ChargeAsync(TtsModelOptions model, ValidClip clip, string key, string? generationId, CancellationToken cancellationToken)
+    {
+        decimal? reported = null;
+        try
+        {
+            reported = await openRouter.LookUpCostAsync(generationId, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled while waiting for OpenRouter's statistics: charge the estimate below, then rethrow.
+        }
+
+        var cost = reported ?? EstimatedCost(model, clip.Text.Length);
+        await RecordAsync(new UsageEntry(model.Id, clip.Voice, clip.Text.Length, cost, key, CacheHit: false));
+        cancellationToken.ThrowIfCancellationRequested();
+        return cost;
+    }
+
+    private static decimal EstimatedCost(TtsModelOptions model, int characters)
+    {
+        var estimate = model.EstimateCost(characters);
+        Log.Warning(
+            "OpenRouter's reported cost for a clip of {Model} could not be read; the cost was estimated from the configured price (${Estimate} for {Characters} characters)",
+            model.Id,
+            estimate.ToString("0.0000######", CultureInfo.InvariantCulture),
+            characters);
+        return estimate;
+    }
+
+    /// <summary>Writes a usage row. A failed write is logged and does not fail the call: the audio is already paid for.</summary>
+    private async Task RecordAsync(UsageEntry entry)
+    {
+        var recorded = await usage.RecordAsync(entry, CancellationToken.None);
+        if (recorded.IsFailed)
+        {
+            Log.Error("A usage record for {Model} could not be written; the clip was not charged to the caller", entry.Model);
+        }
+    }
+
+    /// <summary>Waits for every pending clip's charge, then fails the call with <paramref name="message"/>.</summary>
+    private static async Task<Result<NarrationRun>> FailAfterChargingAsync(List<PendingClip> pending, string message)
+    {
+        await DrainAsync(pending);
+        return Result.Fail<NarrationRun>(message);
+    }
+
+    private static async Task DrainAsync(List<PendingClip> pending)
+    {
+        foreach (var clip in pending)
+        {
+            try
+            {
+                await clip.Cost;
+            }
+            catch (OperationCanceledException)
+            {
+                // Charged before the cancellation surfaced.
+            }
+        }
     }
 
     /// <summary>
@@ -180,11 +294,13 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
             "Try the same call again in a moment; clips already finished are cached and free.");
     }
 
-    private static Result<IReadOnlyList<ClipResult>> StorageFailure()
+    private static readonly string StorageFailureText = ToolErrorFormatter.Format(
+        "the gateway's audio cache is unavailable",
+        "Try again in a moment; if it keeps failing, ask an administrator to check the gateway's storage.");
+
+    private static Result<NarrationRun> StorageFailure()
     {
-        return Result.Fail<IReadOnlyList<ClipResult>>(ToolErrorFormatter.Format(
-            "the gateway's audio cache is unavailable",
-            "Try again in a moment; if it keeps failing, ask an administrator to check the gateway's storage."));
+        return Result.Fail<NarrationRun>(StorageFailureText);
     }
 
     /// <summary>A clip that is synthesized or found in the cache, waiting for its cost before it is reported.</summary>

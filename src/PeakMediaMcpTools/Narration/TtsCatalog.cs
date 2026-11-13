@@ -23,6 +23,18 @@ public sealed class TtsModelOptions
     public bool SendsStyle { get; set; }
 
     public List<string> Voices { get; set; } = [];
+
+    /// <summary>
+    /// The configured price per 1,000 characters, in US dollars. Used only to charge a clip whose real
+    /// cost OpenRouter never reported (an estimate, logged as a warning).
+    /// </summary>
+    public decimal PriceUsdPerThousandCharacters { get; set; }
+
+    /// <summary>The estimated cost of <paramref name="characters"/> characters at the configured price.</summary>
+    public decimal EstimateCost(int characters)
+    {
+        return PriceUsdPerThousandCharacters * characters / 1000m;
+    }
 }
 
 /// <summary>Lookup over the configured allow-list. Model ids are exact; voice names match case-insensitively.</summary>

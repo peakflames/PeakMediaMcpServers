@@ -3,7 +3,7 @@ namespace PeakMediaMcpTools;
 public sealed partial class TtsTools
 {
     [McpServerTool(Name = "synthesize_narration"),
-     Description("Turns a script of 1 to 40 clips (1 to 4,000 characters each) into speech with the gateway's OpenRouter key. Cached clips are free. Returns per-clip metadata in one JSON block with short-lived download URLs for 16-bit mono 24 kHz WAV files; sends one progress notification per clip.")]
+     Description("Turns a script of 1 to 40 clips (1 to 4,000 characters each) into speech with the gateway's OpenRouter key. Cached clips are free; a caller whose monthly quota is reached is refused. Returns per-clip metadata in one JSON block with short-lived download URLs for 16-bit mono 24 kHz WAV files; sends one progress notification per clip.")]
     public async Task<string> SynthesizeNarration(
         [Description("The clips in order. Each has text, and optionally n (defaults to its position), style and voice overriding the call's.")]
         NarrationClipInput[]? clips,
@@ -23,6 +23,8 @@ public sealed partial class TtsTools
         }
 
         var outcome = await narration.RunAsync(request.Value, progress, cancellationToken);
-        return outcome.IsFailed ? outcome.Errors[0].Message : NarrationResultFormatter.Format(outcome.Value);
+        return outcome.IsFailed
+            ? outcome.Errors[0].Message
+            : NarrationResultFormatter.Format(outcome.Value.Clips, outcome.Value.QuotaNote);
     }
 }
