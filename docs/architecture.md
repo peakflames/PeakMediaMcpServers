@@ -106,7 +106,7 @@ directory and probes writability; unwritable → `<temp>/peakmedia/peakmedia.db`
 does not survive a restart. `SqliteConnectionFactory` opens WAL connections and returns
 `Result<SqliteConnection>`. `SchemaMigrator` runs at startup: creates `schema_version` and applies
 the append-only `Migrations` list (empty today). A migration failure logs an error and startup
-continues (Known Issue in design-notes §8). Every table that holds a caller's records carries the
+continues (Known Issue in design-notes §17). Every table that holds a caller's records carries the
 caller's Okta subject. `StorageFaultSwitch` (`PEAKMEDIA_TEST_STORAGE_FAULT=fail|delay:<ms>`) makes
 storage fail or slow down for tests and screen-state checks; it is ignored, with a Warning, in Production.
 
