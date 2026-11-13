@@ -3,7 +3,7 @@ namespace PeakMediaMcpTools;
 public sealed partial class TtsTools
 {
     [McpServerTool(Name = "list_voices", ReadOnly = true, Idempotent = true),
-     Description("Lists the text-to-speech models this gateway allows, each with its voices, its default voice and whether a style is sent to it, and names the default model.")]
+     Description("Lists the text-to-speech models this server allows, each with its voices, its default voice and whether a style is sent to it, and names the default model.")]
     public string ListVoices()
     {
         var text = new StringBuilder();

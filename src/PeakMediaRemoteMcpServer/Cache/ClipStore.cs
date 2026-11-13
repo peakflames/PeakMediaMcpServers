@@ -92,7 +92,9 @@ public sealed class ClipStore(
         return Result.Ok();
     }
 
-    public async Task<Result<string>> IssueDownloadUrlAsync(string cacheKey, CancellationToken cancellationToken)
+    public string LocationKey => "url";
+
+    public async Task<Result<string>> LocateAsync(string cacheKey, CancellationToken cancellationToken)
     {
         var caller = CurrentCaller();
         if (caller.IsFailed)

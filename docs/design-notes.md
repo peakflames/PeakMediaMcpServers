@@ -1,7 +1,7 @@
 # PeakMedia MCP Servers — Design Decision Notes
 
-> **Status:** Decisions as built through the quotas-and-usage epic (EYGrros, v0.1.0). Decisions
-> from later epics are added by `/peak-workflow:refresh-docs` from their session handoffs.
+> **Status:** Decisions as built through the stdio-server-and-client-contract epic (YVOjXtI, v0.1.0).
+> Decisions from later epics are added by `/peak-workflow:refresh-docs` from their session handoffs.
 
 ---
 
@@ -109,12 +109,13 @@ passing it. Mapping GET and DELETE behind the gate prevents routing from being r
 
 ## 12. Tool Registration and `tools/list` Before Any Tool
 
-**Decision:** Both servers register tools with `WithToolsFromAssembly(typeof(ToolErrorFormatter).Assembly)`,
-one partial-class file per tool. `options.ToolCollection ??= []` makes `tools/list` answer, empty, before
-the first tool exists.
+**Decision:** The gateway registers tools with `WithToolsFromAssembly(typeof(ToolErrorFormatter).Assembly)`,
+one partial-class file per tool, and both servers register the shared `TtsTools` explicitly. `options.ToolCollection ??= []`
+makes `tools/list` answer, empty, before the first tool exists.
 
-**Rationale:** A new tool file is picked up by both servers without wiring changes, and clients never see
-a protocol error from listing tools on a fresh build.
+**Rationale:** A new gateway tool file is picked up without wiring changes, and clients never see a protocol error
+from listing tools on a fresh build. The stdio host does not scan the assembly, so only the tools it names are offered
+(see §23 and §42).
 
 ## 13. Default Logging Providers Cleared
 
@@ -221,6 +222,9 @@ to map its group claim under another name. The default keeps the documented beha
 **Rationale:** Both tools need the shared audio cache and the shared key, which exist only on the gateway.
 Keeping registration explicit stops the stdio server from advertising tools it cannot serve.
 
+*Superseded in part by §42 (Epic YVOjXtI): the stdio server now serves `synthesize_narration` and
+`list_voices` through the same `TtsTools` class; only `my_usage` remains gateway-only.*
+
 ---
 
 ## 24. Shared Cache Read Across Callers, Creator Recorded
@@ -264,7 +268,7 @@ When the cost cannot be read, the clip is charged at the model's configured pric
 
 **Rationale:** The speech response does not carry its price; the generation record does. Charging the
 configured price keeps a synthesis from failing over an unreadable cost and stops a caller's spend from
-being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §41).
+being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §47).
 
 ---
 
@@ -272,7 +276,9 @@ being understated. The live header and lookup are confirmed by the live gate (`b
 
 **Decision:** A failed clip in `synthesize_narration` returns an `ERROR:` that names the clip and its position
 (for example "clip 5 of 12") and says the earlier clips are saved. An out-of-credit (402) or rejected-key (401)
-answer gets its own admin-facing message, and the key never appears in it. Calls stop at the failing clip.
+answer gets its own message, and the key never appears in it. Calls stop at the failing clip. The wording of
+the account-specific advice is chosen per host (§44); the status in an unretried answer reads `HTTP <code>` on
+both servers (§45).
 
 **Rationale:** A caller who sees "clip 5 of 12 failed, clips 1–4 are saved" can retry without paying twice, and an
 out-of-credit account needs an administrator, not a retry. The key is never echoed, so a failure cannot leak it.
@@ -342,7 +348,7 @@ only at call start; a call that starts under quota runs to completion and notes 
 
 **Rationale:** A quota that only limited uncached calls would let a caller with a full cache keep spending through
 repeat calls, so the gate applies to every call. Checking at the start (not per clip) keeps a call whole once begun;
-the trade-off is bounded overspend under concurrency (§41).
+the trade-off is bounded overspend under concurrency (§47).
 
 ---
 
@@ -363,7 +369,7 @@ quota comparison in §34 is decided on exact values. Rounding happens only at th
 cost is charged that cost, and cache hits are charged nothing.
 
 **Rationale:** Charging $0 on a read failure let the spend under-count against the quota. The configured price is
-an estimate, so the fallback is visible in the log and is listed in §41 for calibration.
+an estimate, so the fallback is visible in the log and is listed in §47 for calibration.
 
 ---
 
@@ -385,7 +391,7 @@ audio. The clip is not charged.
 
 **Rationale:** The audio has already been synthesized and paid for upstream; failing the caller's call over a
 bookkeeping write would hide the audio without refunding the cost. The trade-off is an uncharged clip, recorded in
-§41 as a known gap.
+§47 as a known gap.
 
 ---
 
@@ -409,7 +415,73 @@ by a test that the marker text is absent from the database, its WAL and SHM file
 
 ---
 
-## 41. Known Issues and Deferred Work
+## 41. Local Clip Cache for the Stdio Server
+
+**Decision:** The stdio server caches each clip as one WAV file named by its cache key, in `PEAK_MEDIA_TTS_CACHE` when
+set, else `~/.cache/peak-media/tts`. A file is a hit only when it parses as a complete 16-bit mono 24 kHz WAV; a damaged
+file is synthesized again and overwritten. Files are written to a temporary name and moved into place. Each clip entry
+returns the file's `path` where the gateway returns a `url`. There is no database and no eviction.
+
+**Rationale:** The directory is the one the peak-media skills download gateway clips into, so a clip already fetched from
+the gateway is a hit for the solo user, and the reverse. A file is its own index, so a solo install needs no database. Validating
+the WAV before serving it keeps a truncated file from being returned as audio.
+
+---
+
+## 42. One Shared Tool Class for Both Servers
+
+**Decision:** `TtsTools` (`list_voices`, `synthesize_narration`) is one class in `PeakMediaMcpTools`, registered by both
+servers. `TtsUsageTools` (`my_usage`) is a separate class registered only by the gateway, because the stdio server has no usage log.
+
+**Rationale:** Both servers' input schemas and result fields match by construction, so the client contract (`docs/client-integration.md`)
+cannot drift between them. The stdio server does not offer `my_usage` because it has nothing to report: the caller is never over quota
+and records nothing.
+
+---
+
+## 43. Offline `fake/tone` Model
+
+**Decision:** The stdio server's `list_voices` lists the model `fake/tone`, and `ToneSpeechClient` synthesizes it offline,
+with no network call and no cost. `SoloSpeechClient` routes each clip by model: `fake/tone` offline, every other model to OpenRouter.
+The gateway refuses `fake/tone`.
+
+**Rationale:** It lets a client exercise the full narration path, including cache and WAV output, without an OpenRouter key or spend. The gateway does
+not offer it because the shared key must not fund offline test audio.
+
+---
+
+## 44. Account Wording Chosen Per Host
+
+**Decision:** `NarrationAccount` words the key, credit and storage failures for the host. The gateway tells the caller to ask an
+administrator; the stdio server tells the solo user to check their own OpenRouter key and their own cache directory.
+
+**Rationale:** Advice that is right on one host is wrong on the other: a solo user is their own administrator. The same tool code produces
+both messages, so the failure is handled the same way and only its advice differs.
+
+---
+
+## 45. Uniform `HTTP <code>` Failure Wording
+
+**Decision:** A clip whose 5xx answer persists after its one retry fails with `(HTTP <code>, retried once)` on both servers. Before Epic YVOjXtI the gateway read
+`status <code>`.
+
+**Rationale:** One format for every host means a client parses one string. No requirement pinned the old wording, so the change
+was low-risk. Any client that parsed `status <code>` would need updating (see §47).
+
+---
+
+## 46. Client Contract Tested Against the Running Servers
+
+**Decision:** The contract document's tool names, argument names and result fields are checked against the running gateway's
+`tools/list` output, and its cache-key rule is checked against `ClipCacheKey.For`. These contract and document tests live in the
+gateway test project. The stdio cache directory is logged at Debug only, because it contains the user's home path.
+
+**Rationale:** The contract document is only useful while it matches the servers, so its tests read the servers rather than
+a copy of their schemas. The gateway test project hosts them because the `my_usage` schema exists only there.
+
+---
+
+## 47. Known Issues and Deferred Work
 
 - **Quota is checked only at call start.** Concurrent calls can each start under quota, so overspend is bounded by
   concurrency × 40 clips (§34).
@@ -447,3 +519,8 @@ by a test that the marker text is absent from the database, its WAL and SHM file
 - **Real Okta round-trip is operator-observed.** Tests use the stub OIDC issuer; the live Okta sign-in
   (TOR-02-hKpbfCf) is checked by hand with `tests/manual/TOR-02-hKpbfCf.md`.
 - **Okta removal is not immediate for existing sessions** (§20): up to the refresh-token lifetime.
+- **Stdio missing-key line carries a log prefix.** The stderr message reaches stderr through Serilog, so it begins with a
+  timestamp and `[FTL]` before `Error: …`. A bare `Error: …` line would match the stdio startup example in CLAUDE.md more closely.
+- **Stdio cost lookup routes `fake/tone` by generation ID.** `SoloSpeechClient.LookUpCostAsync` matches the literal ID
+  `fake-tone`. This works; routing by model would be sturdier.
+- **Upstream failure wording changed on the gateway** (§45). Any client that parsed `status <code>` needs updating.

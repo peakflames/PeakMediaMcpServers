@@ -31,6 +31,8 @@
     <ProjectReference Include="..\TestSupport\PeakMediaTestSupport.csproj" />
     <ProjectReference Include="..\Fakes\PeakMediaTestFakes.csproj" />
     <ProjectReference Include="..\StubAuthorizationServer\PeakMediaStubAuthorizationServer.csproj" />
+    <!-- Build order only: the contract test launches the stdio server's own bin output; nothing is referenced or copied. -->
+    <ProjectReference Include="..\..\src\PeakMediaMcpServer\PeakMediaMcpServer.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
 </Project>

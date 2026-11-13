@@ -85,7 +85,8 @@ public partial class Program
             })
             .WithHttpTransport(options => options.Stateless = true)
             .WithToolsFromAssembly(typeof(ToolErrorFormatter).Assembly)
-            .WithTools<TtsTools>();
+            .WithTools<TtsTools>()
+            .WithTools<TtsUsageTools>();
 
         var app = builder.Build();
         PrepareStorage(app);
@@ -154,6 +155,7 @@ public partial class Program
         services.AddSingleton<UsageStore>();
         services.AddSingleton<QuotaStore>();
         services.AddSingleton<IUsageLedger, UsageLedger>();
+        services.AddTransient<ISpeechClient>(sp => sp.GetRequiredService<OpenRouterSpeechClient>());
         services.AddTransient<NarrationService>();
         services.AddSingleton<CacheEvictor>();
         services.AddHostedService<CacheEvictionService>();

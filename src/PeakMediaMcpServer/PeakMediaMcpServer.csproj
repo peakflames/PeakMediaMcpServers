@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The narration catalogue and OpenRouter defaults; read from the binary's directory. -->
+    <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PeakMediaMcpTools\PeakMediaMcpTools.csproj" />
   </ItemGroup>
 

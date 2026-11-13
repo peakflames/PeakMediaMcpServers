@@ -1,7 +1,8 @@
 # PeakMedia MCP Servers — Architecture Document
 
-> **Status:** Describes the as-built system through the quotas-and-usage epic (EYGrros, v0.1.0): per-user
-> usage log, monthly quotas, the `my_usage` tool. The usage dashboard is not yet built.
+> **Status:** Describes the as-built system through the stdio-server-and-client-contract epic (YVOjXtI, v0.1.0):
+> the gateway's per-user usage log, monthly quotas and `my_usage` tool (EYGrros); the stdio server's local clip
+> cache and shared narration tools (YVOjXtI). The usage dashboard is not yet built.
 > Sections for capabilities not yet built say so explicitly. Run `/peak-workflow:refresh-docs`
 > after completing epics to keep this document aligned with the code.
 
@@ -24,7 +25,7 @@ console variant serves single users with their own OpenRouter key.
 |---|---|---|
 | Runtime | .NET 11 (`net11.0`) | All projects |
 | HTTP server | ASP.NET, `ModelContextProtocol.AspNetCore` | MCP Streamable HTTP at `/mcp` (dev port 5108) |
-| Stdio server | Console app, `ModelContextProtocol` | MCP over stdio, user's own key |
+| Stdio server | Console app, `ModelContextProtocol` | MCP over stdio, user's own key, local clip cache, no database |
 | Shared tools | `PeakMediaMcpTools` class library | MCP tools + OpenRouter client |
 | Caller auth | JwtBearer behind `McpAuth` options; Okta issuer | OAuth 2.1 resource-server gate, org-only |
 | Database | SQLite (`Microsoft.Data.Sqlite`) | Usage log, quotas, audio cache (gateway only) |
@@ -37,7 +38,8 @@ console variant serves single users with their own OpenRouter key.
 
 ## 3. Data Sources
 
-- **OpenRouter** — `POST https://openrouter.ai/api/v1/audio/speech` (one request per uncached clip, raw PCM output, zero data retention); `GET /generation?id=` for the real cost of each clip (the generation ID arrives in the `X-Generation-Id` response header). Shared key (`OpenRouter__ApiKey`) on the gateway, user's own key (`PEAK_MEDIA_OPENROUTER_API_KEY`) on stdio, which registers no narration tools in this build.
+- **OpenRouter** — `POST https://openrouter.ai/api/v1/audio/speech` (one request per uncached clip, raw PCM output, zero data retention); `GET /generation?id=` for the real cost of each clip (the generation ID arrives in the `X-Generation-Id` response header). Shared key (`OpenRouter__ApiKey`) on the gateway; the user's own key (`PEAK_MEDIA_OPENROUTER_API_KEY`, legacy `TTS_OPENROUTER_API_KEY`) on stdio. Stdio clips never touch the shared key or the gateway.
+- **Local clip cache (stdio)** — one WAV file per clip, named by its cache key, in `PEAK_MEDIA_TTS_CACHE` or `~/.cache/peak-media/tts`. The same directory the peak-media skills download gateway clips into. No index, no eviction; a file counts as a hit only when it is a complete WAV.
 - **Okta** — OIDC issuer whose discovery document and JWKS validate caller tokens.
 - **SQLite** — `Storage:DatabasePath` (default `data/peakmedia.db`): usage log, quotas, audio cache index, download tokens, each caller-owned row keyed by Okta subject.
 - **Audio files** — the cached WAV files under `Storage:AudioDirectory` (default `audio/` beside the database; `/app/data/audio` in the container). Bounded by `Storage:CacheMaxGb` (default 10): least-recently-used clips are evicted (see §7).
@@ -66,7 +68,16 @@ RS256 with the gateway's signing key, lifetime, 30 s skew). A 401 is challenged 
 carries `WWW-Authenticate: Bearer resource_metadata="G/.well-known/oauth-protected-resource"`. There is
 no anonymous mode and no development login. G is `Broker:IssuerUri`.
 
-**MCP tools** (gateway only; both sit behind the `/mcp` gate):
+**MCP tools.** The gateway serves all three tools behind the `/mcp` gate. The stdio server serves
+`synthesize_narration` and `list_voices` with identical arguments and result fields; the only difference
+is that each clip entry carries a local file `path` in place of the gateway's `url`. The stdio server
+does not offer `my_usage`. The client-facing contract is `docs/client-integration.md`.
+
+| Tool | Gateway | Stdio |
+|---|---|---|
+| `list_voices` | yes | yes (includes `fake/tone`) |
+| `synthesize_narration` | yes (`url`, quota-gated) | yes (`path`, no quota) |
+| `my_usage` | yes | no |
 
 | Tool | Annotations | Behavior |
 |---|---|---|
@@ -75,7 +86,6 @@ no anonymous mode and no development login. G is `Broker:IssuerUri`.
 | `my_usage` | read-only, idempotent | The caller's own UTC calendar month: amount spent, monthly quota, remaining amount (to the cent), clips synthesized, cache hits and the reset time. Works for callers who are over quota. Reads only through the caller-bound `IUsageLedger` |
 
 Upstream failures in `synthesize_narration` name the failing clip (`ERROR: … clip N of M …`) and say that earlier clips are saved. A transient failure (timeout, unreachable, 5xx) is retried once after `OpenRouter:RetryDelayMs`; a 402 (out of credit) or 401 (rejected key) is reported without a retry and never reveals the key. Calls stop at the failing clip (design-notes §28–§29).
-The stdio server registers no tools yet (`TtsTools` is gateway-only).
 
 ---
 
@@ -86,10 +96,10 @@ The stdio server registers no tools yet (`TtsTools` is gateway-only).
 ```
 PeakMediaMcpServers.sln
 Directory.Build.props              <Version> (single source of truth), net11.0, nullable, implicit usings
-src/PeakMediaMcpTools/             shared library: MCP tools (TtsTools*, incl. TtsTools_MyUsage), ToolErrorFormatter, ServerIdentity, LoggingSetup, UtcDailyFileSink
-  Narration/                       NarrationService (quota gate, cache-first, sequential, per-clip progress and charging), NarrationRequestValidator, NarrationResultFormatter, ClipCacheKey, WavAudio, WordCounter, TtsCatalog, IClipStore, IUsageLedger (UsageStatus, UsageEntry, UsageText)
-  OpenRouter/                      OpenRouterSpeechClient: POST audio/speech (PCM, ZDR) and GET generation?id= for cost; SpeechError (failure kinds), SpeechRetryPolicy
-src/PeakMediaMcpServer/            stdio console server (user's own OpenRouter key, no database)
+src/PeakMediaMcpTools/             shared library: MCP tools (TtsTools, TtsTools_ListVoices, TtsTools_SynthesizeNarration; gateway-only TtsUsageTools_MyUsage), ToolErrorFormatter, ServerIdentity, LoggingSetup, UtcDailyFileSink
+  Narration/                       NarrationService (quota gate, cache-first, sequential, per-clip progress and charging), NarrationRequestValidator, NarrationResultFormatter, NarrationAccount (host-specific failure wording), ClipCacheKey, WavAudio, WordCounter, TtsCatalog, IClipStore, IUsageLedger (UsageStatus, UsageEntry, UsageText)
+  OpenRouter/                      ISpeechClient (speech seam), OpenRouterSpeechClient: POST audio/speech (PCM, ZDR) and GET generation?id= for cost; ToneSpeechClient (offline fake/tone); SpeechError (failure kinds), SpeechRetryPolicy
+src/PeakMediaMcpServer/            stdio console server (user's own OpenRouter key, local clip cache, no database): Program, OpenRouterKey, LocalClipStore, SoloSpeechClient (routes fake/tone offline), UnmeteredUsageLedger, SoloOpenRouterOptions, CommandLine
 src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configuration/, Storage/, Auth/, Broker/, Cache/
   Auth/                            McpAuthSetup (JwtBearer + MCP challenge scheme, admin policy), Caller, AccessRule
   Cache/                           ClipStore (shared audio cache index + WAV files), AudioDirectory, DownloadTokens, ClipEndpoints (GET /clips/{token}), CacheEvictor (LRU eviction + expired-link clean-up), CacheEvictionService (hosted, periodic)
@@ -98,7 +108,7 @@ src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configura
   Broker/Endpoints/                metadata, JWKS, register, authorize, callback, token, consent cookie
   Broker/Storage/                  AppMetaStore, UserStore, ClientStore, TransactionStore, CodeStore, RefreshTokenStore, TokenHashing
   Usage/                           UsageStore (usage log reads/writes), QuotaStore (default quota + admin overrides), UsageLedger (binds stores to the caller from the token), UsageMonth (UTC calendar-month window, NanoUsd money type)
-tests/PeakMediaMcpServer.Tests/    stdio tests (process-level)
+tests/PeakMediaMcpServer.Tests/    stdio tests (process-level; SoloNarration/ drives the built binary over stdin/stdout via tests/TestSupport/StdioClient.cs)
 tests/PeakMediaRemoteMcpServer.Tests/  gateway tests (in-process + process-level)
 tests/TestSupport/                 ServerProcess harness, RepoPaths, FreePort, TempDirectory, LogPatterns, ListLogger
 tests/Fakes/                       FakeOpenRouter (canned PCM at POST /api/v1/audio/speech, cost via generation lookup)
@@ -116,6 +126,10 @@ On the gateway: Kestrel → routing → authentication (JwtBearer) → authoriza
 → tool method. `options.ToolCollection ??= []` makes `tools/list` answer (empty) before the first
 tool exists.
 
+Narration tools are registered explicitly: `TtsTools` (shared: `list_voices`, `synthesize_narration`) is
+registered by both servers with `WithTools<TtsTools>()`; `TtsUsageTools` (`my_usage`) only by the gateway,
+which also scans the tools assembly with `WithToolsFromAssembly`. The stdio host does not scan.
+
 **Gateway startup order** (`src/PeakMediaRemoteMcpServer/Program.cs`):
 1. `CreateBuilder` — content root is the binary's directory, whatever the working directory.
 2. Serilog configured from `LoggingSetup` → first record `[INF] PeakMediaRemoteMcpServer v<ver> starting`
@@ -130,7 +144,9 @@ tool exists.
 **Stdio startup order** (`src/PeakMediaMcpServer/Program.cs`): parse args (`--version` → stdout line,
 exit 0; anything but no args → stderr message, exit 2) → Serilog → startup record → read
 `PEAK_MEDIA_OPENROUTER_API_KEY` (legacy `TTS_OPENROUTER_API_KEY`; missing → exit 1) → generic host
-with providers cleared + Serilog → MCP stdio transport.
+with providers cleared + Serilog → narration services (`TtsCatalog` from `Tts`, `LocalClipStore`, `UnmeteredUsageLedger`,
+`SoloSpeechClient` over an `HttpClient` that carries the key) → MCP stdio transport with `WithTools<TtsTools>()`.
+The stdio server opens no database.
 
 **Storage.** `Storage:DatabasePath` (relative → content root). `DatabasePathResolver` creates the
 directory and probes writability; unwritable → `<temp>/peakmedia/peakmedia.db` with a Warning that it
@@ -152,7 +168,7 @@ table references; `oauth_clients`; `oauth_transactions` (incl. the gateway's ups
 nonce, consent-cookie hash); `oauth_codes(code_hash, subject → users, …)`; `oauth_refresh_tokens(token_hash,
 subject → users, client_id, expires_utc)`. Times are Unix seconds; codes, refresh tokens, client secrets
 and the consent cookie are stored only as SHA-256 hashes; no upstream (Okta) token is stored. A migration failure logs an error and startup
-continues (Known Issue in design-notes §41). Every table that holds a caller's records carries the
+continues (Known Issue in design-notes §47). Every table that holds a caller's records carries the
 caller's Okta subject. `StorageFaultSwitch` (`PEAKMEDIA_TEST_STORAGE_FAULT=fail|delay:<ms>`) makes
 storage fail or slow down for tests and screen-state checks; it is ignored, with a Warning, in Production.
 
@@ -243,6 +259,8 @@ N/A — no user interface
 - **Quotas.** Every usage and quota read or write goes through `UsageStore`/`QuotaStore` with the caller
   from the validated token (`UsageLedger`), so the owner-or-admin rule of `AccessRule` applies. Only
   administrators may set quota overrides. Usage and quota records never carry narration text.
+- **Stdio key handling.** The user's own key is read from the environment and held only on the stdio `HttpClient`'s
+  Authorization header; it is never logged, and no stdio code path writes it to the local cache or stdout.
 - Secrets arrive only through environment variables; `appsettings*.json` holds non-secret values.
   Secret-holding classes (`BrokerOptions`, `OpenRouterOptions`, token/registration responses, the
   sign-in transaction) are `sealed class`, never records. Logs never carry tokens, codes or secrets;

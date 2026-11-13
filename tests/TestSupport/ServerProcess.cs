@@ -26,6 +26,14 @@ public sealed class ServerProcess : IDisposable
         "ASPNETCORE_ENVIRONMENT",
         "DOTNET_ENVIRONMENT",
         "PEAKMEDIA_TEST_STORAGE_FAULT",
+        "PEAK_MEDIA_TTS_CACHE",
+        "OpenRouter__BaseUrl",
+        "OpenRouter__RetryDelayMs",
+        "OpenRouter__ClipTimeout",
+        "OpenRouter__CostLookupDelaysMs",
+        "OpenRouter__CostLookupDelaysMs__0",
+        "OpenRouter__CostLookupDelaysMs__1",
+        "OpenRouter__CostLookupDelaysMs__2",
     ];
 
     private readonly Process _process;

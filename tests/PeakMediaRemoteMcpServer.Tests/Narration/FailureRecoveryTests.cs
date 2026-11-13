@@ -81,7 +81,7 @@ public class FailureRecoveryTests
         await using var client = await NarrationClient.StartAsync();
         client.OpenRouter.StatusOverride = request => request.Input == TextOf(5) ? 503 : null;
         var failed = await client.SynthesizeAsync(NarrationClient.Clips(12));
-        Assert.StartsWith("ERROR: OpenRouter did not answer for clip 5 of 12 (status 503, retried once). Clips 1–4 are saved", failed.Text, StringComparison.Ordinal);
+        Assert.StartsWith("ERROR: OpenRouter did not answer for clip 5 of 12 (HTTP 503, retried once). Clips 1–4 are saved", failed.Text, StringComparison.Ordinal);
 
         client.OpenRouter.StatusOverride = _ => null;
         var before = client.OpenRouter.Requests.Count;
@@ -105,7 +105,7 @@ public class FailureRecoveryTests
 
     [Theory]
     [InlineData(SpeechFailureKind.Unreachable, null, 3, 1, "ERROR: OpenRouter did not answer for clip 2 of 3 (unreachable, retried once). Clip 1 is saved; run the same request again to continue.")]
-    [InlineData(SpeechFailureKind.ServerError, 502, 1, 0, "ERROR: OpenRouter did not answer for clip 1 of 1 (status 502, retried once). Run the same request again to retry.")]
+    [InlineData(SpeechFailureKind.ServerError, 502, 1, 0, "ERROR: OpenRouter did not answer for clip 1 of 1 (HTTP 502, retried once). Run the same request again to retry.")]
     [InlineData(SpeechFailureKind.Other, 400, 3, 2, "ERROR: OpenRouter could not synthesize clip 3. Try the same call again in a moment; clips already finished are cached and free.")]
     public void Failure_message_names_clip_and_saved_clips(SpeechFailureKind kind, int? status, int total, int saved, string expected)
     {

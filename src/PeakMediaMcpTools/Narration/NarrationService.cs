@@ -1,6 +1,10 @@
 namespace PeakMediaMcpTools.Narration;
 
-/// <summary>One clip of a finished call, in the shape returned to the caller.</summary>
+/// <summary>
+/// One clip of a finished call, in the shape returned to the caller. <see cref="Location"/> is the
+/// gateway's download URL or the stdio server's local file path; the formatter names it after
+/// <see cref="IClipStore.LocationKey"/>.
+/// </summary>
 public sealed record ClipResult(
     int N,
     string CacheKey,
@@ -10,10 +14,13 @@ public sealed record ClipResult(
     bool Cached,
     decimal CostUsd,
     int SampleRate,
-    string Url);
+    string Location);
 
-/// <summary>A finished call: its clips in order, and the over-quota note when the call ended at or over quota.</summary>
-public sealed record NarrationRun(IReadOnlyList<ClipResult> Clips, string? QuotaNote);
+/// <summary>
+/// A finished call: its clips in order, the over-quota note when the call ended at or over quota, and the
+/// name of the field carrying each clip's location (<c>url</c> or <c>path</c>).
+/// </summary>
+public sealed record NarrationRun(IReadOnlyList<ClipResult> Clips, string? QuotaNote, string LocationKey);
 
 /// <summary>
 /// Runs a validated request clip by clip, in order. The caller's monthly quota is checked first: a caller
@@ -25,8 +32,10 @@ public sealed record NarrationRun(IReadOnlyList<ClipResult> Clips, string? Quota
 /// is known. A call that fails or is cancelled part-way still charges every clip already synthesized.
 /// Narration text is never logged or stored — only its character count and cache key.
 /// </summary>
-public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient openRouter, IUsageLedger usage)
+public sealed class NarrationService(IClipStore clips, ISpeechClient openRouter, IUsageLedger usage, NarrationAccount? account = null)
 {
+    private readonly NarrationAccount _account = account ?? NarrationAccount.Gateway;
+
     public async Task<Result<NarrationRun>> RunAsync(
         ValidNarrationRequest request,
         IProgress<ProgressNotificationValue>? progress,
@@ -35,7 +44,7 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
         var before = await usage.GetStatusAsync(cancellationToken);
         if (before.IsFailed)
         {
-            return StorageFailure();
+            return Result.Fail<NarrationRun>(_account.StorageFailure);
         }
 
         if (before.Value.IsOverQuota)
@@ -56,7 +65,7 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
                 var found = await clips.FindAsync(key, cancellationToken);
                 if (found.IsFailed)
                 {
-                    return await FailAfterChargingAsync(pending, StorageFailureText);
+                    return await FailAfterChargingAsync(pending, _account.StorageFailure);
                 }
 
                 if (found.Value is { } hit)
@@ -70,7 +79,7 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
                     if (audio.IsFailed)
                     {
                         // Stop at the failing clip: later clips are never requested. Clips before it are saved and charged.
-                        return await FailAfterChargingAsync(pending, SpeechFailure(audio.Errors[0], clip.N, i + 1, total, savedBefore: i));
+                        return await FailAfterChargingAsync(pending, SpeechFailure(audio.Errors[0], clip.N, i + 1, total, savedBefore: i, _account));
                     }
 
                     var durationMs = WavAudio.DurationMs(audio.Value.Pcm.Length);
@@ -79,19 +88,19 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
                     pending.Add(new PendingClip(clip, key, durationMs, false, cost));
                     if (saved.IsFailed)
                     {
-                        return await FailAfterChargingAsync(pending, StorageFailureText);
+                        return await FailAfterChargingAsync(pending, _account.StorageFailure);
                     }
                 }
 
                 if (!await ReportReadyAsync(pending, results, total, progress, waitForAll: false, cancellationToken))
                 {
-                    return await FailAfterChargingAsync(pending, StorageFailureText);
+                    return await FailAfterChargingAsync(pending, _account.StorageFailure);
                 }
             }
 
             if (!await ReportReadyAsync(pending, results, total, progress, waitForAll: true, cancellationToken))
             {
-                return await FailAfterChargingAsync(pending, StorageFailureText);
+                return await FailAfterChargingAsync(pending, _account.StorageFailure);
             }
         }
         catch (OperationCanceledException)
@@ -112,7 +121,7 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
             note = $"You are now over your monthly quota ({UsageText.Dollars(after.Value.Spent)} of {UsageText.Dollars(after.Value.Quota)}).";
         }
 
-        return Result.Ok(new NarrationRun(results, note));
+        return Result.Ok(new NarrationRun(results, note, clips.LocationKey));
     }
 
     /// <summary>
@@ -209,8 +218,8 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
             var index = results.Count;
             var next = pending[index];
             var cost = await next.Cost;
-            var url = await clips.IssueDownloadUrlAsync(next.Key, cancellationToken);
-            if (url.IsFailed)
+            var location = await clips.LocateAsync(next.Key, cancellationToken);
+            if (location.IsFailed)
             {
                 return false;
             }
@@ -225,7 +234,7 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
                 next.Cached,
                 cost,
                 WavAudio.SampleRate,
-                url.Value));
+                location.Value));
 
             var position = $"clip {(index + 1).ToString(CultureInfo.InvariantCulture)}/{total.ToString(CultureInfo.InvariantCulture)}";
             var message = next.Cached
@@ -241,8 +250,9 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
     /// The caller-facing text for a failed clip at <paramref name="position"/> of <paramref name="total"/>,
     /// with <paramref name="savedBefore"/> clips already in the cache. Never carries the key or exception text.
     /// </summary>
-    public static string SpeechFailure(IError error, int clipN, int position, int total, int savedBefore)
+    public static string SpeechFailure(IError error, int clipN, int position, int total, int savedBefore, NarrationAccount? account = null)
     {
+        account ??= NarrationAccount.Gateway;
         var n = clipN.ToString(CultureInfo.InvariantCulture);
         if (error is not SpeechError speech)
         {
@@ -252,13 +262,9 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
         switch (speech.Kind)
         {
             case SpeechFailureKind.OutOfCredit:
-                return ToolErrorFormatter.Format(
-                    "the gateway's OpenRouter account is out of credit",
-                    "Ask an administrator to add credit.");
+                return account.OutOfCredit;
             case SpeechFailureKind.KeyRejected:
-                return ToolErrorFormatter.Format(
-                    "the gateway's OpenRouter key was rejected",
-                    "Ask an administrator to check the gateway's key.");
+                return account.KeyRejected;
             case SpeechFailureKind.Timeout:
             case SpeechFailureKind.Unreachable:
             case SpeechFailureKind.ServerError:
@@ -266,7 +272,7 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
                 {
                     SpeechFailureKind.Timeout => "timeout",
                     SpeechFailureKind.Unreachable => "unreachable",
-                    _ => $"status {speech.Status?.ToString(CultureInfo.InvariantCulture) ?? "5xx"}",
+                    _ => $"HTTP {speech.Status?.ToString(CultureInfo.InvariantCulture) ?? "5xx"}",
                 };
                 var retried = speech.Retried ? ", retried once" : string.Empty;
                 return ToolErrorFormatter.Format(
@@ -292,15 +298,6 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
         return ToolErrorFormatter.Format(
             $"OpenRouter could not synthesize clip {n}",
             "Try the same call again in a moment; clips already finished are cached and free.");
-    }
-
-    private static readonly string StorageFailureText = ToolErrorFormatter.Format(
-        "the gateway's audio cache is unavailable",
-        "Try again in a moment; if it keeps failing, ask an administrator to check the gateway's storage.");
-
-    private static Result<NarrationRun> StorageFailure()
-    {
-        return Result.Fail<NarrationRun>(StorageFailureText);
     }
 
     /// <summary>A clip that is synthesized or found in the cache, waiting for its cost before it is reported.</summary>

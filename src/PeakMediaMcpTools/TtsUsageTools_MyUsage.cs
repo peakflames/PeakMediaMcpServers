@@ -1,6 +1,6 @@
 namespace PeakMediaMcpTools;
 
-public sealed partial class TtsTools
+public sealed partial class TtsUsageTools
 {
     [McpServerTool(Name = "my_usage", ReadOnly = true, Idempotent = true),
      Description("Shows your own usage for the current calendar month (UTC): month, amount spent, monthly quota, remaining amount, clips synthesized, cache hits and when the quota resets. US dollars to the cent.")]

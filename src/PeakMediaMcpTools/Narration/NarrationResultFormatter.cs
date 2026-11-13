@@ -15,7 +15,17 @@ public static class NarrationResultFormatter
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public static string Format(IReadOnlyList<ClipResult> clips, string? quotaNote = null)
+    /// <summary>The clip-entry field for a gateway download link.</summary>
+    public const string UrlKey = "url";
+
+    /// <summary>The clip-entry field for a stdio server's local file path.</summary>
+    public const string PathKey = "path";
+
+    /// <summary>
+    /// Formats the result. Each clip's <see cref="ClipResult.Location"/> is written under
+    /// <paramref name="locationKey"/> (<c>url</c> or <c>path</c>), as the last field of the entry.
+    /// </summary>
+    public static string Format(IReadOnlyList<ClipResult> clips, string locationKey, string? quotaNote = null)
     {
         var median = MedianWpm(clips);
         var cached = clips.Count(c => c.Cached);
@@ -45,13 +55,15 @@ public static class NarrationResultFormatter
         for (var i = 0; i < clips.Count; i++)
         {
             var separator = i < clips.Count - 1 ? "," : string.Empty;
-            text.AppendLine($"  {JsonSerializer.Serialize(clips[i], EntryJson)}{separator}");
+            text.AppendLine($"  {Entry(clips[i], locationKey).ToJsonString(EntryJson)}{separator}");
         }
 
         text.AppendLine("]");
         text.AppendLine("```");
         text.AppendLine();
-        text.Append("Each `url` downloads the clip's WAV for 15 minutes; call synthesize_narration again with the same request for new links — cached clips are free.");
+        text.Append(locationKey == PathKey
+            ? "Each `path` is the clip's WAV in your local cache; the same request again is served from it at no cost."
+            : "Each `url` downloads the clip's WAV for 15 minutes; call synthesize_narration again with the same request for new links — cached clips are free.");
         if (!string.IsNullOrEmpty(quotaNote))
         {
             text.AppendLine();
@@ -60,6 +72,14 @@ public static class NarrationResultFormatter
         }
 
         return text.ToString();
+    }
+
+    private static JsonObject Entry(ClipResult clip, string locationKey)
+    {
+        var entry = JsonSerializer.SerializeToNode(clip, EntryJson)!.AsObject();
+        entry.Remove("location");
+        entry[locationKey] = clip.Location;
+        return entry;
     }
 
     /// <summary>A call's cost: <c>$0.00</c> for a free call, otherwise four decimals (e.g. <c>$0.0100</c>).</summary>
