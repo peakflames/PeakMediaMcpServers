@@ -7,4 +7,10 @@ public sealed class StorageOptions
 
     /// <summary>SQLite file path; relative paths resolve against the content root (next to the binary).</summary>
     public string DatabasePath { get; set; } = "data/peakmedia.db";
+
+    /// <summary>
+    /// Directory holding the cached WAV files. Empty means <c>audio/</c> beside the resolved database
+    /// file; relative paths resolve against the content root.
+    /// </summary>
+    public string AudioDirectory { get; set; } = string.Empty;
 }

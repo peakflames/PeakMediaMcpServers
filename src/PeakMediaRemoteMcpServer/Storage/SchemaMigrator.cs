@@ -62,6 +62,31 @@ public sealed class SchemaMigrator
             CREATE INDEX ix_oauth_codes_subject ON oauth_codes(subject);
             CREATE INDEX ix_oauth_refresh_tokens_subject ON oauth_refresh_tokens(subject);
             """),
+
+        // 2 — narration (Epic 8po1tRg): the shared audio cache index (the WAV files live in
+        // Storage:AudioDirectory) and short-lived download tokens. The cache is shared by design, so
+        // it is read by key and records the subject who created each clip; a download token is owned
+        // by the caller it was issued to and is stored only as its SHA-256 hash.
+        (2, """
+            CREATE TABLE audio_cache (
+                cache_key          TEXT PRIMARY KEY,
+                size_bytes         INTEGER NOT NULL,
+                duration_ms        INTEGER NOT NULL,
+                created_by_subject TEXT NOT NULL,
+                created_utc        INTEGER NOT NULL,
+                last_used_utc      INTEGER NOT NULL
+            );
+            CREATE TABLE clip_downloads (
+                token_hash  TEXT PRIMARY KEY,
+                cache_key   TEXT NOT NULL REFERENCES audio_cache(cache_key) ON DELETE CASCADE,
+                subject     TEXT NOT NULL,
+                created_utc INTEGER NOT NULL,
+                expires_utc INTEGER NOT NULL
+            );
+            CREATE INDEX ix_audio_cache_created_by_subject ON audio_cache(created_by_subject);
+            CREATE INDEX ix_clip_downloads_subject ON clip_downloads(subject);
+            CREATE INDEX ix_clip_downloads_expires ON clip_downloads(expires_utc);
+            """),
     ];
 
     private readonly SqliteConnectionFactory _connections;
