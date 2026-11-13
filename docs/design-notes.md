@@ -203,8 +203,23 @@ from the validated token. The `admin` authorization policy uses the same rule.
 
 ---
 
-## 22. Known Issues and Deferred Work
+## 22. Configurable Groups Claim Name
 
+**Decision:** The OIDC claim that carries group membership is configurable (`Broker:UpstreamGroupsClaim`,
+default `groups`). `admin` is granted when that claim contains `Admin:Group`.
+
+**Rationale:** Okta's federated-claims screen reserves the `groups` claim name, so an organization may need
+to map its group claim under another name. The default keeps the documented behavior.
+
+---
+
+## 23. Known Issues and Deferred Work
+
+- **`/token` verifies a client secret only when one is presented.** A client registered as
+  `client_secret_post` can redeem a code without presenting its secret, and the refresh grant accepts a
+  request with no `client_id`. PKCE and refresh-token rotation still protect both paths; consider tightening.
+- **A Debug-level log line records the Okta subject.** The subject is an opaque ID, not an email, and the
+  line is not emitted at the default Information level.
 - **Migration failure does not stop startup.** `PrepareStorage` logs an error and keeps starting when the
   schema migration fails. Decide whether to refuse to start once real tables exist.
 - **Log directory must be writable in the container.** If `/app/logs` is not writable, the file sink fails

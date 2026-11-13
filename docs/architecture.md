@@ -125,7 +125,7 @@ table references; `oauth_clients`; `oauth_transactions` (incl. the gateway's ups
 nonce, consent-cookie hash); `oauth_codes(code_hash, subject → users, …)`; `oauth_refresh_tokens(token_hash,
 subject → users, client_id, expires_utc)`. Times are Unix seconds; codes, refresh tokens, client secrets
 and the consent cookie are stored only as SHA-256 hashes; no upstream (Okta) token is stored. A migration failure logs an error and startup
-continues (Known Issue in design-notes §22). Every table that holds a caller's records carries the
+continues (Known Issue in design-notes §23). Every table that holds a caller's records carries the
 caller's Okta subject. `StorageFaultSwitch` (`PEAKMEDIA_TEST_STORAGE_FAULT=fail|delay:<ms>`) makes
 storage fail or slow down for tests and screen-state checks; it is ignored, with a Warning, in Production.
 
@@ -206,7 +206,7 @@ N/A — no user interface
 - **Refresh policy.** Refresh tokens are the gateway's own opaque secrets (hashed), rotated on every use,
   30 days. Refresh does not contact Okta, so removing a person from the Okta app takes effect for an
   existing session when its refresh token expires; new sign-ins are refused at once.
-- **Roles and the access rule.** `admin` when the ID token's `groups` claim contains `Admin:Group`,
+- **Roles and the access rule.** `admin` when the ID token's groups claim (`Broker:UpstreamGroupsClaim`, default `groups`) contains `Admin:Group`,
   decided at sign-in and stored on `users`. `Caller.From(principal)` builds the caller from the token;
   `AccessRule.CanAccess(caller, ownerSubject)` (owner or admin) and `AccessRule.RequireAdmin` are the one
   place every later tool and page decides access; the `admin` authorization policy uses the same rule.
