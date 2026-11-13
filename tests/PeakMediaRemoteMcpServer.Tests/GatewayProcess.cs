@@ -15,6 +15,8 @@ internal static class GatewayProcess
             ["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}",
             ["ASPNETCORE_ENVIRONMENT"] = "Development",
             ["McpAuth__Enabled"] = "true",
+            ["McpAuth__Resource"] = $"http://127.0.0.1:{port}/mcp",
+            ["Broker__IssuerUri"] = $"http://127.0.0.1:{port}",
             ["Broker__UpstreamAuthority"] = "https://example.okta.com",
             ["Broker__UpstreamClientId"] = "test-client",
             ["Broker__UpstreamClientSecret"] = "test-secret",

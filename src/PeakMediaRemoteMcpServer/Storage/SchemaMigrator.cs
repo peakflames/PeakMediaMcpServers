@@ -9,7 +9,60 @@ namespace PeakMediaRemoteMcpServer.Storage;
 public sealed class SchemaMigrator
 {
     /// <summary>Ordered migrations: (version, SQL). Append only; never edit a shipped entry.</summary>
-    public static readonly IReadOnlyList<(int Version, string Sql)> Migrations = [];
+    public static readonly IReadOnlyList<(int Version, string Sql)> Migrations =
+    [
+        // 1 — sign-in (Epic 7BASFbp): key/value metadata (the token-signing key), the users table whose
+        // subject is the owner key every later table carries, and the broker's OAuth state. Times are
+        // Unix seconds (UTC). Secrets the gateway only verifies are stored as SHA-256 hashes.
+        (1, """
+            CREATE TABLE app_meta (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE users (
+                subject        TEXT PRIMARY KEY,
+                email          TEXT NOT NULL,
+                is_admin       INTEGER NOT NULL DEFAULT 0,
+                first_seen_utc INTEGER NOT NULL,
+                last_seen_utc  INTEGER NOT NULL
+            );
+            CREATE TABLE oauth_clients (
+                client_id          TEXT PRIMARY KEY,
+                client_secret_hash TEXT NOT NULL,
+                redirect_uris_json TEXT NOT NULL,
+                client_name        TEXT,
+                created_utc        INTEGER NOT NULL
+            );
+            CREATE TABLE oauth_transactions (
+                txn_id                 TEXT PRIMARY KEY,
+                client_id              TEXT NOT NULL,
+                client_redirect_uri    TEXT NOT NULL,
+                client_state           TEXT NOT NULL,
+                client_code_challenge  TEXT NOT NULL,
+                upstream_code_verifier TEXT NOT NULL,
+                nonce                  TEXT NOT NULL,
+                consent_token_hash     TEXT NOT NULL,
+                created_utc            INTEGER NOT NULL,
+                expires_utc            INTEGER NOT NULL
+            );
+            CREATE TABLE oauth_codes (
+                code_hash             TEXT PRIMARY KEY,
+                subject               TEXT NOT NULL REFERENCES users(subject) ON DELETE CASCADE,
+                client_id             TEXT NOT NULL,
+                client_redirect_uri   TEXT NOT NULL,
+                client_code_challenge TEXT NOT NULL,
+                expires_utc           INTEGER NOT NULL
+            );
+            CREATE TABLE oauth_refresh_tokens (
+                token_hash  TEXT PRIMARY KEY,
+                subject     TEXT NOT NULL REFERENCES users(subject) ON DELETE CASCADE,
+                client_id   TEXT NOT NULL,
+                expires_utc INTEGER NOT NULL
+            );
+            CREATE INDEX ix_oauth_codes_subject ON oauth_codes(subject);
+            CREATE INDEX ix_oauth_refresh_tokens_subject ON oauth_refresh_tokens(subject);
+            """),
+    ];
 
     private readonly SqliteConnectionFactory _connections;
 

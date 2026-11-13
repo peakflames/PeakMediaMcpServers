@@ -1,0 +1,12 @@
+global using System.Collections.Concurrent;
+global using System.Net;
+global using System.Net.Sockets;
+global using System.Security.Cryptography;
+global using System.Text;
+global using Microsoft.AspNetCore.Builder;
+global using Microsoft.AspNetCore.Hosting;
+global using Microsoft.AspNetCore.Http;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Logging;
+global using Microsoft.IdentityModel.JsonWebTokens;
+global using Microsoft.IdentityModel.Tokens;

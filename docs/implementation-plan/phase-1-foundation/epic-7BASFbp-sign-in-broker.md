@@ -1,7 +1,7 @@
 # Epic 7BASFbp: Sign-in through the broker
 
 **Phase:** 1 — Foundation
-**Status:** Not Started
+**Status:** Complete — 2026-11-12
 **Dependencies:** Epic Xq463wX (Walking skeleton — running gateway, storage, test harness)
 **Planned by:** Todd Schavey
 **Planned:** 2026-11-12
