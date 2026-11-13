@@ -278,11 +278,11 @@ Baseline and the design-system tokens take precedence over their choices.
 
 Run every applicable check before marking an epic Implemented or Complete:
 
-- **Build:** `python build.py build`
-- **Tests:** `python build.py test` (tests/)
+- **Build:** `.venv/bin/python build.py build`
+- **Tests:** `.venv/bin/python build.py test` (tests/)
 - **Lint / format:** `dotnet format PeakMediaMcpServers.sln --verify-no-changes`
-- **Run the tool:** `python build.py start` then `curl http://localhost:5108/version` → `{"name":"PeakMediaRemoteMcpServer","version":"<semver>"}` and `python build.py mcp tools` lists the tools; stdio: `dotnet run --project src/PeakMediaMcpServer -- --version` → `PeakMediaMcpServer v<semver>`, exit 0
-- **Visual / console (UI only):** `playwright-cli` against the running dashboard (`python build.py start`, then `http://localhost:5108/`), signed in through the stub issuer's test helper
+- **Run the tool:** `.venv/bin/python build.py start` then `curl http://localhost:5108/version` → `{"name":"PeakMediaRemoteMcpServer","version":"<semver>"}` and `.venv/bin/python build.py mcp tools` lists the tools; stdio: `dotnet run --project src/PeakMediaMcpServer -- --version` → `PeakMediaMcpServer v<semver>`, exit 0
+- **Visual / console (UI only):** `playwright-cli` against the running dashboard (`.venv/bin/python build.py start`, then `http://localhost:5108/`), signed in through the stub issuer's test helper
 
 ## Important Reminders
 
