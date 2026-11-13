@@ -2,12 +2,14 @@ namespace PeakMediaRemoteMcpServer.Tests.Broker;
 
 public class BrokerStorageTests
 {
+    private static readonly int LatestVersion = SchemaMigrator.Migrations.Max(m => m.Version);
+
     private static async Task<(TempDirectory Directory, SqliteConnectionFactory Factory)> FreshDatabaseAsync()
     {
         var directory = new TempDirectory();
         var factory = new SqliteConnectionFactory(directory.File("peakmedia.db"), StorageFaultSwitch.None);
         var migrated = await new SchemaMigrator(factory).MigrateAsync();
-        Assert.Equal(1, migrated.Value);
+        Assert.Equal(LatestVersion, migrated.Value);
         return (directory, factory);
     }
 
@@ -41,7 +43,7 @@ public class BrokerStorageTests
 
         var again = await new SchemaMigrator(factory).MigrateAsync();
 
-        Assert.Equal(1, again.Value);
+        Assert.Equal(LatestVersion, again.Value);
     }
 
     [Fact]

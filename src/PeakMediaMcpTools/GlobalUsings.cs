@@ -18,4 +18,3 @@ global using PeakMediaMcpTools.OpenRouter;
 global using Serilog;
 global using Serilog.Core;
 global using Serilog.Events;
-global using MsLogging = Microsoft.Extensions.Logging;

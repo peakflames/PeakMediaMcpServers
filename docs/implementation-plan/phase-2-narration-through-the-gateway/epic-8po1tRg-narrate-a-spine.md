@@ -1,7 +1,7 @@
 # Epic 8po1tRg: Narrate a spine
 
 **Phase:** 2 — Narration through the gateway
-**Status:** In Progress
+**Status:** Implemented — 2026-11-13
 **Dependencies:** Epic 7BASFbp (Sign-in through the broker — signed-in callers)
 **Planned by:** Todd Schavey
 **Planned:** 2026-11-12

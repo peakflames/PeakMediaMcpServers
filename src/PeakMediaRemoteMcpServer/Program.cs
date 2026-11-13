@@ -9,6 +9,9 @@ public partial class Program
 {
     public const string ServerName = "PeakMediaRemoteMcpServer";
 
+    /// <summary>The named <see cref="HttpClient"/> that carries the shared OpenRouter key.</summary>
+    public const string OpenRouterHttpClientName = "openrouter";
+
     public static ServerIdentity Identity { get; } = ServerIdentity.From(typeof(Program).Assembly, ServerName);
 
     public static int Main(string[] args)
@@ -65,7 +68,10 @@ public partial class Program
         builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
         builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 
+        builder.Services.Configure<TtsOptions>(builder.Configuration.GetSection(TtsOptions.SectionName));
+
         AddStorage(builder.Services);
+        AddNarration(builder.Services);
         builder.Services.AddBroker();
         builder.Services.AddCallerAuthentication();
 
@@ -77,7 +83,8 @@ public partial class Program
                 options.ToolCollection ??= [];
             })
             .WithHttpTransport(options => options.Stateless = true)
-            .WithToolsFromAssembly(typeof(ToolErrorFormatter).Assembly);
+            .WithToolsFromAssembly(typeof(ToolErrorFormatter).Assembly)
+            .WithTools<TtsTools>();
 
         var app = builder.Build();
         PrepareStorage(app);
@@ -89,6 +96,7 @@ public partial class Program
         app.MapGet("/version", () => Results.Json(new { name = Identity.Name, version = Identity.Version }))
             .AllowAnonymous();
         app.MapBrokerEndpoints();
+        app.MapClipEndpoints();
         app.MapMcp("/mcp").RequireAuthorization();
         // Stateless Streamable HTTP serves POST only. Map the other methods behind the same gate so an
         // unauthenticated caller always gets 401 (never a 405 that reveals routing before sign-in);
@@ -114,6 +122,31 @@ public partial class Program
             return new SqliteConnectionFactory(path, faultSwitch);
         });
         services.AddSingleton<SchemaMigrator>();
+    }
+
+    /// <summary>
+    /// The narration tools' services: the configured catalogue, the shared clip cache, download links,
+    /// and the OpenRouter client carrying the server-held key (set on the client, never logged).
+    /// </summary>
+    private static void AddNarration(IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddHttpContextAccessor();
+        services.AddSingleton(sp => new TtsCatalog(sp.GetRequiredService<IOptions<TtsOptions>>().Value));
+        services.AddSingleton(sp => AudioDirectory.Resolve(
+            sp.GetRequiredService<IOptions<StorageOptions>>().Value,
+            sp.GetRequiredService<SqliteConnectionFactory>().DatabasePath,
+            sp.GetRequiredService<IHostEnvironment>().ContentRootPath));
+        services.AddSingleton<DownloadTokens>();
+        services.AddSingleton<IClipStore, ClipStore>();
+        services.AddHttpClient<OpenRouterSpeechClient>(OpenRouterHttpClientName, (sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+            client.Timeout = TimeSpan.FromMinutes(2);
+        });
+        services.AddTransient<NarrationService>();
     }
 
     private static void PrepareStorage(WebApplication app)
