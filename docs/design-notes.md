@@ -462,7 +462,7 @@ both messages, so the failure is handled the same way and only its advice differ
 
 ## 45. Uniform `HTTP <code>` Failure Wording
 
-**Decision:** An unretried upstream failure reads `(HTTP <code>, retried once)` on both servers. Before Epic YVOjXtI the gateway read
+**Decision:** A clip whose 5xx answer persists after its one retry fails with `(HTTP <code>, retried once)` on both servers. Before Epic YVOjXtI the gateway read
 `status <code>`.
 
 **Rationale:** One format for every host means a client parses one string. No requirement pinned the old wording, so the change
