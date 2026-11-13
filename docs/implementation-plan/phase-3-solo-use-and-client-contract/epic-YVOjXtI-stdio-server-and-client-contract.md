@@ -1,7 +1,7 @@
 # Epic YVOjXtI: Stdio server and client contract
 
 **Phase:** 3 — Solo use and client contract
-**Status:** Not Started
+**Status:** Implemented — 2026-11-13
 **Dependencies:** Epic 8po1tRg (Narrate a spine — shared narration tools), Epic 8nPWJzI (Failure recovery and cache eviction — retry and failure errors), Epic EYGrros (Quotas and usage — `my_usage` contract for the document)
 **Planned by:** Todd Schavey
 **Planned:** 2026-11-12

@@ -81,6 +81,18 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   runs to completion and notes `You are now over your monthly quota ($25.32 of $25.00).`
 - `my_usage` MCP tool (gateway only): the caller's own month, spent, quota, remaining, clips synthesized,
   cache hits and reset time, in US dollars to the cent and UTC.
+- Stdio server narration for solo users with their own OpenRouter key (`PEAK_MEDIA_OPENROUTER_API_KEY`,
+  legacy `TTS_OPENROUTER_API_KEY`): the same `synthesize_narration` and `list_voices` as the gateway (identical
+  input schemas), no sign-in and no database. Clips are written straight into the local cache
+  (`PEAK_MEDIA_TTS_CACHE`, default `~/.cache/peak-media/tts`) under their cache key and returned as `path` in
+  place of `url`; a valid WAV already there is served free without calling OpenRouter. The offline model
+  `fake/tone` synthesizes a sine tone with no network call, for testing.
+- `docs/client-integration.md`: the contract the peak-media skills follow for either server — tool arguments
+  and result fields, the cache key, the selection order (connected `peak-media` server → personal key → beat
+  grid, never falling back after an `ERROR:`), the download-into-cache step, and the `claude mcp add` commands.
 
 ### Changed
 - The narration summary prints a free call's cost as `$0.00` (other costs keep four decimals, e.g. `$0.0100`).
+- A clip that OpenRouter did not answer now reports the status as `HTTP 503` (was `status 503`), e.g.
+  `ERROR: OpenRouter did not answer for clip 2 of 3 (HTTP 503, retried once). …`, on both servers.
+- Tool descriptions no longer say "gateway": `synthesize_narration` and `list_voices` are shared by both servers.

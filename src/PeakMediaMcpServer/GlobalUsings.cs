@@ -1,6 +1,10 @@
+global using System.Net.Http.Headers;
 global using FluentResults;
+global using Microsoft.Extensions.Configuration;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Hosting;
 global using Microsoft.Extensions.Logging;
 global using PeakMediaMcpTools;
+global using PeakMediaMcpTools.Narration;
+global using PeakMediaMcpTools.OpenRouter;
 global using Serilog;

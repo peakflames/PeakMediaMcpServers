@@ -30,7 +30,7 @@ public sealed class CostLookupSchedule(IReadOnlyList<TimeSpan> delays)
 /// is never logged). Each clip is one <c>POST audio/speech</c> asking for raw PCM with zero data
 /// retention; the real cost comes later from <c>GET generation?id=</c> (<see cref="LookUpCostAsync"/>).
 /// </summary>
-public sealed class OpenRouterSpeechClient(HttpClient http, CostLookupSchedule schedule, SpeechRetryPolicy? retryPolicy = null)
+public sealed class OpenRouterSpeechClient(HttpClient http, CostLookupSchedule schedule, SpeechRetryPolicy? retryPolicy = null) : ISpeechClient
 {
     public const string GenerationIdHeader = "X-Generation-Id";
 
