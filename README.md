@@ -32,6 +32,10 @@ Non-secret settings (environment or `appsettings.json`):
 | `McpAuth__Resource` | `<Broker__IssuerUri>/mcp` (default `http://localhost:5108/mcp`) |
 | `Admin__Group` | Okta group whose members get the `admin` role (empty: nobody) |
 | `Broker__UpstreamGroupsClaim` | ID-token claim holding group names (default `groups`) |
+| `OpenRouter__ClipTimeout` | How long one OpenRouter request may take before it is a timeout (default `00:02:00`) |
+| `OpenRouter__RetryDelayMs` | Wait before the one retry of a timed-out, unreachable or 5xx clip (default `1000`) |
+| `Storage__CacheMaxGb` | Audio cache limit in GB; least-recently-used clips are evicted above it (default `10`, must be > 0) |
+| `Storage__EvictionIntervalMinutes` | Minutes between cache eviction passes (default `10`) |
 
 ```bash
 export OpenRouter__ApiKey=...                   # never commit these

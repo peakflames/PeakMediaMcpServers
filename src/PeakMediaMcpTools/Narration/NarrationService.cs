@@ -49,9 +49,8 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
                 var audio = await openRouter.SynthesizeAsync(request.Model, clip.Voice, clip.Style, clip.Text, cancellationToken);
                 if (audio.IsFailed)
                 {
-                    return Result.Fail<IReadOnlyList<ClipResult>>(ToolErrorFormatter.Format(
-                        $"OpenRouter could not synthesize clip {clip.N.ToString(CultureInfo.InvariantCulture)}",
-                        "Try the same call again in a moment; clips already finished are cached and free."));
+                    // Stop at the failing clip: later clips are never requested. Clips before it are saved.
+                    return Result.Fail<IReadOnlyList<ClipResult>>(SpeechFailure(audio.Errors[0], clip.N, i + 1, total, savedBefore: i));
                 }
 
                 var durationMs = WavAudio.DurationMs(audio.Value.Pcm.Length);
@@ -122,6 +121,63 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// The caller-facing text for a failed clip at <paramref name="position"/> of <paramref name="total"/>,
+    /// with <paramref name="savedBefore"/> clips already in the cache. Never carries the key or exception text.
+    /// </summary>
+    public static string SpeechFailure(IError error, int clipN, int position, int total, int savedBefore)
+    {
+        var n = clipN.ToString(CultureInfo.InvariantCulture);
+        if (error is not SpeechError speech)
+        {
+            return OtherFailure(n);
+        }
+
+        switch (speech.Kind)
+        {
+            case SpeechFailureKind.OutOfCredit:
+                return ToolErrorFormatter.Format(
+                    "the gateway's OpenRouter account is out of credit",
+                    "Ask an administrator to add credit.");
+            case SpeechFailureKind.KeyRejected:
+                return ToolErrorFormatter.Format(
+                    "the gateway's OpenRouter key was rejected",
+                    "Ask an administrator to check the gateway's key.");
+            case SpeechFailureKind.Timeout:
+            case SpeechFailureKind.Unreachable:
+            case SpeechFailureKind.ServerError:
+                var reason = speech.Kind switch
+                {
+                    SpeechFailureKind.Timeout => "timeout",
+                    SpeechFailureKind.Unreachable => "unreachable",
+                    _ => $"status {speech.Status?.ToString(CultureInfo.InvariantCulture) ?? "5xx"}",
+                };
+                var retried = speech.Retried ? ", retried once" : string.Empty;
+                return ToolErrorFormatter.Format(
+                    $"OpenRouter did not answer for clip {n} of {total.ToString(CultureInfo.InvariantCulture)} ({reason}{retried})",
+                    SavedClips(savedBefore));
+            default:
+                return OtherFailure(n);
+        }
+    }
+
+    private static string SavedClips(int saved)
+    {
+        return saved switch
+        {
+            0 => "Run the same request again to retry.",
+            1 => "Clip 1 is saved; run the same request again to continue.",
+            _ => $"Clips 1–{saved.ToString(CultureInfo.InvariantCulture)} are saved; run the same request again to continue.",
+        };
+    }
+
+    private static string OtherFailure(string n)
+    {
+        return ToolErrorFormatter.Format(
+            $"OpenRouter could not synthesize clip {n}",
+            "Try the same call again in a moment; clips already finished are cached and free.");
     }
 
     private static Result<IReadOnlyList<ClipResult>> StorageFailure()

@@ -118,6 +118,9 @@ public sealed class GatewayTestHost : IAsyncDisposable
             settings["OpenRouter:CostLookupDelaysMs:0"] = "1";
             settings["OpenRouter:CostLookupDelaysMs:1"] = "2";
             settings["OpenRouter:CostLookupDelaysMs:2"] = "4";
+            // Retry a failed clip after 1 ms and give up on an unanswered clip after 1 s (short, but slack enough for a busy test run).
+            settings["OpenRouter:RetryDelayMs"] = "1";
+            settings["OpenRouter:ClipTimeout"] = "00:00:01";
         }
 
         foreach (var (key, value) in overrides ?? new Dictionary<string, string?>())

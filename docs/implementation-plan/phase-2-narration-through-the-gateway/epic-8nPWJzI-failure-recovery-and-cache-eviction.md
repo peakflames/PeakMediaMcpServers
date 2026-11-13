@@ -1,7 +1,7 @@
 # Epic 8nPWJzI: Failure recovery and cache eviction
 
 **Phase:** 2 — Narration through the gateway
-**Status:** Not Started
+**Status:** Implemented — 2026-11-13
 **Dependencies:** Epic 8po1tRg (Narrate a spine — synthesis and the shared cache)
 **Planned by:** Todd Schavey
 **Planned:** 2026-11-12

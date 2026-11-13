@@ -36,10 +36,11 @@ public sealed class StubOidcIssuer : IAsyncDisposable
     private StubUser _nextUser = StubUser.For("pat@example.com");
     private string? _refusal;
 
-    private StubOidcIssuer(WebApplication app, string authority)
+    private StubOidcIssuer(WebApplication app, string authority, string clientSecret)
     {
         _app = app;
         Authority = authority;
+        ClientSecret = clientSecret;
         _signingKey = new RsaSecurityKey(RSA.Create(2048)) { KeyId = "stub-key-1" };
     }
 
@@ -47,7 +48,7 @@ public sealed class StubOidcIssuer : IAsyncDisposable
 
     public string ClientId { get; } = DefaultClientId;
 
-    public string ClientSecret { get; } = DefaultClientSecret;
+    public string ClientSecret { get; }
 
     public string AuthorizationEndpoint => $"{Authority}/authorize";
 
@@ -56,7 +57,8 @@ public sealed class StubOidcIssuer : IAsyncDisposable
 
     public IReadOnlyList<StubRequest> Requests => [.. _requests];
 
-    public static async Task<StubOidcIssuer> StartAsync()
+    /// <summary>Starts the stub; <paramref name="clientSecret"/> is the client secret it expects at <c>/token</c>.</summary>
+    public static async Task<StubOidcIssuer> StartAsync(string clientSecret = DefaultClientSecret)
     {
         var port = FreePortFor();
         var authority = $"http://127.0.0.1:{port}";
@@ -64,7 +66,7 @@ public sealed class StubOidcIssuer : IAsyncDisposable
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls(authority);
         var app = builder.Build();
-        var stub = new StubOidcIssuer(app, authority);
+        var stub = new StubOidcIssuer(app, authority, clientSecret);
         stub.Map(app);
         await app.StartAsync();
         return stub;

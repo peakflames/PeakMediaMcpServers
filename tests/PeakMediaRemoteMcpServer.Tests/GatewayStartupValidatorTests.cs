@@ -46,6 +46,24 @@ public class GatewayStartupValidatorTests
         Assert.Equal(expected, result.Errors.Single().Message);
     }
 
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    public void Cache_limit_of_zero_or_less_is_refused(string value)
+    {
+        var result = GatewayStartupValidator.Validate(ValidWith("Storage:CacheMaxGb", value));
+
+        Assert.Equal(GatewayStartupValidator.CacheMaxGbInvalidMessage, result.Errors.Single().Message);
+    }
+
+    [Fact]
+    public void Fractional_cache_limit_is_allowed()
+    {
+        var result = GatewayStartupValidator.Validate(ValidWith("Storage:CacheMaxGb", "0.5"));
+
+        Assert.True(result.IsSuccess);
+    }
+
     [Fact]
     public void Plain_http_authority_is_allowed_on_loopback()
     {
