@@ -1,6 +1,6 @@
 # PeakMedia MCP Servers — Design Decision Notes
 
-> **Status:** Decisions as built through the sign-in epic (7BASFbp, v0.1.0). Decisions
+> **Status:** Decisions as built through the narration epic (8po1tRg, v0.1.0). Decisions
 > from later epics are added by `/peak-workflow:refresh-docs` from their session handoffs.
 
 ---
@@ -213,8 +213,82 @@ to map its group claim under another name. The default keeps the documented beha
 
 ---
 
-## 23. Known Issues and Deferred Work
+## 23. Narration Tools Are Gateway-Only
 
+**Decision:** `TtsTools` carries no `[McpServerToolType]`. The gateway registers it explicitly with
+`WithTools<TtsTools>()`; the stdio server's assembly scan does not offer the narration tools.
+
+**Rationale:** Both tools need the shared audio cache and the shared key, which exist only on the gateway.
+Keeping registration explicit stops the stdio server from advertising tools it cannot serve.
+
+---
+
+## 24. Shared Cache Read Across Callers, Creator Recorded
+
+**Decision:** The audio cache is read by content key (`ClipCacheKey`: SHA-256 of model, voice, style and
+text) across all callers. `audio_cache.created_by_subject` records who created a clip; `clip_downloads.subject`
+records who owns each download token.
+
+**Rationale:** Identical clips cost money once, so a cache shared by key saves spend for everyone. This is a
+deliberate exception to per-owner reads. The rule still holds for the caller-facing data: the download token
+and its owner are per caller, and a clip's bytes are unreadable without a token derived from it.
+
+---
+
+## 25. Anonymous Download Links Carry Their Own Credential
+
+**Decision:** `GET /clips/{token}` sits outside the bearer gate (`AllowAnonymous`). The token is 32 random bytes
+in base64url (43 characters), valid for 15 minutes, reusable within that window, and stored only as SHA-256.
+Expired tokens return 410 Gone; unknown tokens return 404.
+
+**Rationale:** The links are handed to a player or a browser that holds no bearer token. An unguessable
+token that cannot be derived from the clip is the access control for those links (TOR-04-DYooFQF,
+TOR-04-SqAxPKp). Hashing means a read of the database does not yield working links.
+
+---
+
+## 26. Injected Clock for Expiry
+
+**Decision:** All narration timestamps come from the injected `TimeProvider` as Unix milliseconds.
+
+**Rationale:** Tests drive the 15-minute expiry with `FakeTimeProvider` instead of waiting, so the valid-at-14-minutes
+and gone-at-16-minutes checks run in milliseconds.
+
+---
+
+## 27. Cost From the Generation Lookup
+
+**Decision:** A clip's real cost comes from `GET /generation?id=` using the `X-Generation-Id` response header.
+When the header is missing, the clip is recorded at $0.00 and a warning is logged.
+
+**Rationale:** The speech response does not carry its price; the generation record does. The $0 fallback keeps a
+synthesis from failing over a missing header, and the warning keeps the gap visible. Confirming the live
+header and lookup is a by-hand OpenRouter check (see §29).
+
+---
+
+## 28. Generic Upstream Failure Wording
+
+**Decision:** An upstream failure in `synthesize_narration` returns `ERROR: OpenRouter could not synthesize clip N.`
+with a next action. Specific wording for 401, 402 and timeouts is deferred.
+
+**Rationale:** Validation errors are specific and precede any spend. Upstream errors are generic for now; the
+specific cases belong to a later epic, once the live failure modes are known.
+
+---
+
+## 29. Known Issues and Deferred Work
+
+- **Expired download rows are never deleted.** `clip_downloads` grows without bound until cache housekeeping
+  lands; expired rows are refused with 410 but not removed. The same applies to cache files, which have no
+  eviction yet.
+- **`ClipCacheKey.IsWellFormed` is unused.** Dead code; remove or use it when the cache key is parsed from a URL.
+- **Tool failures are normal text results, not `isError: true`.** This satisfies TOR-01-Ji4u6Ta as written.
+  Revisit if MCP clients need the error flag.
+- **`.autopilot/` is tracked.** The autopilot test-change log (`.autopilot/test-changes.jsonl`) is committed on the
+  feature branch, and `.autopilot/` is not in `.gitignore`.
+- **Real OpenRouter synthesis is not exercised in CI.** Tests use `FakeOpenRouter`. The live speech call and the
+  `X-Generation-Id` cost lookup are a by-hand check against the real service.
 - **`/token` verifies a client secret only when one is presented.** A client registered as
   `client_secret_post` can redeem a code without presenting its secret, and the refresh grant accepts a
   request with no `client_id`. PKCE and refresh-token rotation still protect both paths; consider tightening.
