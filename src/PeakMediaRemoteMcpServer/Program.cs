@@ -139,6 +139,8 @@ public partial class Program
             sp.GetRequiredService<IHostEnvironment>().ContentRootPath));
         services.AddSingleton<DownloadTokens>();
         services.AddSingleton<IClipStore, ClipStore>();
+        services.AddSingleton(sp => CostLookupSchedule.FromMilliseconds(
+            sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.CostLookupDelaysMs));
         services.AddHttpClient<OpenRouterSpeechClient>(OpenRouterHttpClientName, (sp, client) =>
         {
             var options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;

@@ -11,4 +11,11 @@ public sealed class OpenRouterOptions
     public string ApiKey { get; set; } = string.Empty;
 
     public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1";
+
+    /// <summary>
+    /// Waits, in milliseconds, between generation-cost lookups while OpenRouter has not published the
+    /// clip's cost yet. Unset means the default
+    /// 500, 1000, 2000, 4000, then 8000 seven times (about 63.5 s).
+    /// </summary>
+    public int[]? CostLookupDelaysMs { get; set; }
 }

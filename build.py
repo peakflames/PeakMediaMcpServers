@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build script for PeakMediaMcpServers
-Supports: build, run, start, stop, status, mcp commands
+Supports: build, run, start, stop, status, test, test-live, mcp, log commands
 """
 
 import sys
@@ -16,7 +16,9 @@ import subprocess
 import signal
 import time
 import json
+import tempfile
 import urllib.error
+import xml.etree.ElementTree as ElementTree
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -48,6 +50,11 @@ LOG_GLOB = "PeakMediaRemoteMcpServer_*.log"
 DEV_PORT = 5108
 # A gateway access token for `build.py mcp` (sent as a Bearer token, never printed).
 ACCESS_TOKEN_VARIABLE = "PEAK_MEDIA_ACCESS_TOKEN"
+# The live OpenRouter gate: a real key (never printed), falling back to OpenRouter__ApiKey in .env.
+LIVE_KEY_VARIABLE = "PEAK_MEDIA_LIVE_OPENROUTER_API_KEY"
+LIVE_TEST_PROJECT = "tests/PeakMediaRemoteMcpServer.Tests/PeakMediaRemoteMcpServer.Tests.csproj"
+LIVE_TEST_FILTER = "Category=LiveOpenRouter"
+ENV_FILE = Path(".env")
 
 
 def latest_log_file() -> Optional[Path]:
@@ -211,6 +218,69 @@ def stop_background() -> None:
     except Exception as e:
         print(f"Error stopping application: {e}")
         sys.exit(1)
+
+
+def read_env_file_value(name: str) -> str:
+    """The value of `name` in .env (KEY=VALUE lines, optional `export`, optional quotes), or ''."""
+    if not ENV_FILE.exists():
+        return ""
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        if key == name:
+            return value.strip().strip('"').strip("'")
+    return ""
+
+
+def run_live_tests() -> int:
+    """Run the live OpenRouter test; fail unless it actually ran and passed (a skip is a failure)."""
+    key = os.environ.get(LIVE_KEY_VARIABLE, "").strip()
+    source = LIVE_KEY_VARIABLE
+    if not key:
+        key = read_env_file_value("OpenRouter__ApiKey")
+        source = "OpenRouter__ApiKey in .env"
+    if not key:
+        print(f"Error: no OpenRouter key for the live test. Set {LIVE_KEY_VARIABLE} or put OpenRouter__ApiKey in .env, then rerun.",
+              file=sys.stderr)
+        return 1
+
+    print(f"Running the live OpenRouter test (real spend, about $0.001; key from {source})...")
+    env = os.environ.copy()
+    env[LIVE_KEY_VARIABLE] = key
+    with tempfile.TemporaryDirectory(prefix="peakmedia-live-") as results_dir:
+        completed = subprocess.run(
+            ["dotnet", "test", LIVE_TEST_PROJECT, "--filter", LIVE_TEST_FILTER,
+             "--logger", "trx;LogFileName=live.trx", "--results-directory", results_dir],
+            env=env,
+        )
+        trx = Path(results_dir) / "live.trx"
+        if not trx.exists():
+            print("Error: the live test produced no results. Check the build output above and rerun.", file=sys.stderr)
+            return 1
+        counters = next((e for e in ElementTree.parse(trx).iter() if e.tag.endswith("Counters")), None)
+        if counters is None:
+            print("Error: the live test results could not be read. Rerun build.py test-live.", file=sys.stderr)
+            return 1
+        passed = int(counters.get("passed", "0"))
+        failed = int(counters.get("failed", "0")) + int(counters.get("error", "0"))
+        skipped = int(counters.get("notExecuted", "0"))
+
+    print(f"Live OpenRouter: {passed} passed, {failed} failed, {skipped} skipped")
+    if completed.returncode != 0 or failed > 0:
+        print("Error: the live OpenRouter test failed. Read the failure above; the real service disagrees with the gateway.",
+              file=sys.stderr)
+        return 1
+    if passed == 0 or skipped > 0:
+        print(f"Error: the live OpenRouter test did not run (skipped or not found). Check {LIVE_KEY_VARIABLE} and the test filter.",
+              file=sys.stderr)
+        return 1
+    print("✓ Live OpenRouter gate passed")
+    return 0
 
 
 def run_dotnet_command(command: str) -> None:
@@ -528,6 +598,7 @@ def print_usage() -> None:
     print("  stop         - Stop the background application")
     print("  status       - Check if application is running")
     print("  test         - Run the test suite (dotnet test)")
+    print("  test-live    - Run the live OpenRouter test (real spend; fails if skipped)")
     print("")
     print("MCP Commands (requires the .venv with fastmcp; /mcp needs sign-in):")
     print("  mcp ping                 - Check MCP server connectivity")
@@ -625,6 +696,10 @@ def main() -> None:
         
         sys.exit(run_mcp(subcommand, tool_name, tool_args, oauth=oauth))
     
+    # Live upstream gate
+    if command == "test-live":
+        sys.exit(run_live_tests())
+
     # Help command
     if command in ["help", "--help", "-h"]:
         print_usage()

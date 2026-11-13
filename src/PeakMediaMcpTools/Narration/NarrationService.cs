@@ -14,8 +14,10 @@ public sealed record ClipResult(
 
 /// <summary>
 /// Runs a validated request clip by clip, in order: a cache hit costs nothing; a miss is synthesized,
-/// wrapped as WAV and stored at once, so clips finished before a failure stay cached. One progress
-/// report per clip.
+/// wrapped as WAV and stored at once, so clips finished before a failure stay cached. OpenRouter
+/// publishes a clip's cost only seconds later, so each clip's cost lookup runs in the background while
+/// the next clip synthesizes; clips are reported (one progress notification each) and returned strictly
+/// in order, each once its cost is known.
 /// </summary>
 public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient openRouter)
 {
@@ -24,13 +26,13 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
         IProgress<ProgressNotificationValue>? progress,
         CancellationToken cancellationToken)
     {
-        var results = new List<ClipResult>(request.Clips.Count);
         var total = request.Clips.Count;
+        var pending = new List<PendingClip>(total);
+        var results = new List<ClipResult>(total);
         for (var i = 0; i < total; i++)
         {
             var clip = request.Clips[i];
             var key = ClipCacheKey.For(request.Model.Id, clip.Voice, clip.Style, clip.Text);
-            var position = $"clip {(i + 1).ToString(CultureInfo.InvariantCulture)}/{total.ToString(CultureInfo.InvariantCulture)}";
 
             var found = await clips.FindAsync(key, cancellationToken);
             if (found.IsFailed)
@@ -38,16 +40,9 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
                 return StorageFailure();
             }
 
-            int durationMs;
-            decimal cost;
-            bool cached;
-            string message;
             if (found.Value is { } hit)
             {
-                durationMs = hit.DurationMs;
-                cost = 0m;
-                cached = true;
-                message = $"{position} cached";
+                pending.Add(new PendingClip(clip, key, hit.DurationMs, true, Task.FromResult(0m)));
             }
             else
             {
@@ -59,41 +54,74 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
                         "Try the same call again in a moment; clips already finished are cached and free."));
                 }
 
-                durationMs = WavAudio.DurationMs(audio.Value.Pcm.Length);
+                var durationMs = WavAudio.DurationMs(audio.Value.Pcm.Length);
                 var saved = await clips.SaveAsync(key, WavAudio.FromPcm(audio.Value.Pcm), durationMs, cancellationToken);
                 if (saved.IsFailed)
                 {
                     return StorageFailure();
                 }
 
-                cost = audio.Value.CostUsd;
-                cached = false;
-                message = string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{position} synthesized ({durationMs / 1000.0:0.0} s audio, ${cost:0.0000})");
+                var cost = openRouter.LookUpCostAsync(audio.Value.GenerationId, cancellationToken);
+                pending.Add(new PendingClip(clip, key, durationMs, false, cost));
             }
 
-            var url = await clips.IssueDownloadUrlAsync(key, cancellationToken);
-            if (url.IsFailed)
+            if (!await ReportReadyAsync(pending, results, total, progress, waitForAll: false, cancellationToken))
             {
                 return StorageFailure();
             }
+        }
 
-            var words = WordCounter.Count(clip.Text);
-            results.Add(new ClipResult(
-                clip.N,
-                key,
-                durationMs,
-                words,
-                WordCounter.WordsPerMinute(words, durationMs),
-                cached,
-                cost,
-                WavAudio.SampleRate,
-                url.Value));
-            progress?.Report(new ProgressNotificationValue { Progress = i + 1, Total = total, Message = message });
+        if (!await ReportReadyAsync(pending, results, total, progress, waitForAll: true, cancellationToken))
+        {
+            return StorageFailure();
         }
 
         return Result.Ok<IReadOnlyList<ClipResult>>(results);
+    }
+
+    /// <summary>
+    /// Reports, in clip order, every pending clip whose cost is known — or, with
+    /// <paramref name="waitForAll"/>, every pending clip, waiting for each cost in turn.
+    /// </summary>
+    private async Task<bool> ReportReadyAsync(
+        List<PendingClip> pending,
+        List<ClipResult> results,
+        int total,
+        IProgress<ProgressNotificationValue>? progress,
+        bool waitForAll,
+        CancellationToken cancellationToken)
+    {
+        while (results.Count < pending.Count && (waitForAll || pending[results.Count].Cost.IsCompleted))
+        {
+            var index = results.Count;
+            var next = pending[index];
+            var cost = await next.Cost;
+            var url = await clips.IssueDownloadUrlAsync(next.Key, cancellationToken);
+            if (url.IsFailed)
+            {
+                return false;
+            }
+
+            var words = WordCounter.Count(next.Clip.Text);
+            results.Add(new ClipResult(
+                next.Clip.N,
+                next.Key,
+                next.DurationMs,
+                words,
+                WordCounter.WordsPerMinute(words, next.DurationMs),
+                next.Cached,
+                cost,
+                WavAudio.SampleRate,
+                url.Value));
+
+            var position = $"clip {(index + 1).ToString(CultureInfo.InvariantCulture)}/{total.ToString(CultureInfo.InvariantCulture)}";
+            var message = next.Cached
+                ? $"{position} cached"
+                : string.Create(CultureInfo.InvariantCulture, $"{position} synthesized ({next.DurationMs / 1000.0:0.0} s audio, ${cost:0.0000})");
+            progress?.Report(new ProgressNotificationValue { Progress = index + 1, Total = total, Message = message });
+        }
+
+        return true;
     }
 
     private static Result<IReadOnlyList<ClipResult>> StorageFailure()
@@ -102,4 +130,7 @@ public sealed class NarrationService(IClipStore clips, OpenRouterSpeechClient op
             "the gateway's audio cache is unavailable",
             "Try again in a moment; if it keeps failing, ask an administrator to check the gateway's storage."));
     }
+
+    /// <summary>A clip that is synthesized or found in the cache, waiting for its cost before it is reported.</summary>
+    private sealed record PendingClip(ValidClip Clip, string Key, int DurationMs, bool Cached, Task<decimal> Cost);
 }

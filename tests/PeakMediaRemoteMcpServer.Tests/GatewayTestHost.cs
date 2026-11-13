@@ -48,6 +48,23 @@ public sealed class GatewayTestHost : IAsyncDisposable
         return StartAsync(stub.Authority, stub.ClientId, stub.ClientSecret, overrides, openRouter, configureServices);
     }
 
+    /// <summary>
+    /// A host that delegates sign-in to the stub OIDC issuer and sends OpenRouter traffic to the real
+    /// OpenRouter with <paramref name="openRouterApiKey"/> — for the opt-in live tests only.
+    /// </summary>
+    public static Task<GatewayTestHost> StartLiveAsync(
+        StubOidcIssuer stub,
+        string openRouterApiKey,
+        Action<IServiceCollection>? configureServices = null)
+    {
+        var overrides = new Dictionary<string, string?>
+        {
+            ["OpenRouter:ApiKey"] = openRouterApiKey,
+            ["OpenRouter:BaseUrl"] = "https://openrouter.ai/api/v1",
+        };
+        return StartAsync(stub.Authority, stub.ClientId, stub.ClientSecret, overrides, null, configureServices);
+    }
+
     /// <summary>Counts rows in a gateway table (table names are test constants).</summary>
     public async Task<long> CountRowsAsync(string table, string? subject = null)
     {
@@ -95,6 +112,14 @@ public sealed class GatewayTestHost : IAsyncDisposable
             ["OpenRouter:ApiKey"] = "test-key",
             ["Storage:DatabasePath"] = data.File("peakmedia.db"),
         };
+        if (openRouter is not null)
+        {
+            // The fake publishes a generation's cost as soon as it is told to; retry in milliseconds.
+            settings["OpenRouter:CostLookupDelaysMs:0"] = "1";
+            settings["OpenRouter:CostLookupDelaysMs:1"] = "2";
+            settings["OpenRouter:CostLookupDelaysMs:2"] = "4";
+        }
+
         foreach (var (key, value) in overrides ?? new Dictionary<string, string?>())
         {
             settings[key] = value;

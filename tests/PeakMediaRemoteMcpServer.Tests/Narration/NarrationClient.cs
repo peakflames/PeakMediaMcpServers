@@ -11,18 +11,20 @@ public sealed record ToolCall(
 /// <summary>
 /// A gateway with the fake OpenRouter, the stub OIDC issuer and a controllable clock, plus a caller
 /// signed in through the real broker flow (<see cref="TestSignIn"/>) — no auth bypass. Calls tools
-/// with JSON-RPC <c>tools/call</c> over the Streamable HTTP transport.
+/// with JSON-RPC <c>tools/call</c> over the Streamable HTTP transport. <see cref="StartLiveAsync"/>
+/// talks to the real OpenRouter instead of the fake.
 /// </summary>
 public sealed class NarrationClient : IAsyncDisposable
 {
     public const string ProgressToken = "progress-1";
 
+    private readonly FakeOpenRouter? _openRouter;
     private int _nextId = 10;
 
-    private NarrationClient(StubOidcIssuer stub, FakeOpenRouter openRouter, GatewayTestHost host, FakeTimeProvider clock, string accessToken)
+    private NarrationClient(StubOidcIssuer stub, FakeOpenRouter? openRouter, GatewayTestHost host, FakeTimeProvider clock, string accessToken)
     {
         Stub = stub;
-        OpenRouter = openRouter;
+        _openRouter = openRouter;
         Host = host;
         Clock = clock;
         AccessToken = accessToken;
@@ -30,7 +32,7 @@ public sealed class NarrationClient : IAsyncDisposable
 
     public StubOidcIssuer Stub { get; }
 
-    public FakeOpenRouter OpenRouter { get; }
+    public FakeOpenRouter OpenRouter => _openRouter ?? throw new InvalidOperationException("A live client has no fake OpenRouter.");
 
     public GatewayTestHost Host { get; }
 
@@ -46,6 +48,16 @@ public sealed class NarrationClient : IAsyncDisposable
         var host = await GatewayTestHost.StartAsync(stub, openRouter, services => services.AddSingleton<TimeProvider>(clock));
         var signedIn = await TestSignIn.SignInAsync(host.Client, stub, StubUser.For(email));
         return new NarrationClient(stub, openRouter, host, clock, signedIn.AccessToken);
+    }
+
+    /// <summary>A gateway that calls the real OpenRouter with <paramref name="openRouterApiKey"/>; sign-in still uses the stub issuer.</summary>
+    public static async Task<NarrationClient> StartLiveAsync(string openRouterApiKey, string email = "pat@example.com")
+    {
+        var stub = await StubOidcIssuer.StartAsync();
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var host = await GatewayTestHost.StartLiveAsync(stub, openRouterApiKey, services => services.AddSingleton<TimeProvider>(clock));
+        var signedIn = await TestSignIn.SignInAsync(host.Client, stub, StubUser.For(email));
+        return new NarrationClient(stub, null, host, clock, signedIn.AccessToken);
     }
 
     /// <summary>Signs a second caller in to the same gateway and returns their access token.</summary>
@@ -189,7 +201,11 @@ public sealed class NarrationClient : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await Host.DisposeAsync();
-        await OpenRouter.DisposeAsync();
+        if (_openRouter is not null)
+        {
+            await _openRouter.DisposeAsync();
+        }
+
         await Stub.DisposeAsync();
     }
 }

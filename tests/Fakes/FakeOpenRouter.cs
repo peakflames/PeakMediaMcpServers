@@ -46,6 +46,7 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
     private readonly WebApplication _app;
     private readonly ConcurrentDictionary<string, decimal> _costs = new();
     private readonly ConcurrentQueue<FakeSpeechRequest> _requests = new();
+    private readonly ConcurrentDictionary<string, int> _lookups = new();
 
     private FakeOpenRouter(WebApplication app)
     {
@@ -61,6 +62,15 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
     /// <summary>When it returns a status code, the speech request fails with it instead of answering audio.</summary>
     public Func<FakeSpeechRequest, int?> StatusOverride { get; set; } = _ => null;
 
+    /// <summary>
+    /// How many cost lookups of each generation answer 404 before its statistics appear (default 0).
+    /// Real OpenRouter answers 404 for several seconds after the speech call.
+    /// </summary>
+    public int GenerationNotReadyFor { get; set; }
+
+    /// <summary>Every <c>GET generation</c> request received, ready or not.</summary>
+    public int GenerationLookups => _lookups.Values.Sum();
+
     /// <summary>Every speech request received, in order.</summary>
     public IReadOnlyList<FakeSpeechRequest> Requests => [.. _requests];
 
@@ -71,9 +81,7 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
         var app = builder.Build();
         var fake = new FakeOpenRouter(app);
         app.MapPost("/api/v1/audio/speech", fake.SpeechAsync);
-        app.MapGet("/api/v1/generation", (string id) => fake._costs.TryGetValue(id, out var cost)
-            ? Results.Json(new { data = new { id, total_cost = cost } })
-            : Results.NotFound());
+        app.MapGet("/api/v1/generation", fake.Generation);
         await app.StartAsync();
         return fake;
     }
@@ -103,6 +111,17 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _app.DisposeAsync();
+    }
+
+    private IResult Generation(string id)
+    {
+        var seen = _lookups.AddOrUpdate(id, 1, (_, count) => count + 1);
+        if (seen <= GenerationNotReadyFor || !_costs.TryGetValue(id, out var cost))
+        {
+            return Results.NotFound();
+        }
+
+        return Results.Json(new { data = new { id, total_cost = cost } });
     }
 
     private async Task<IResult> SpeechAsync(HttpRequest request, HttpResponse response)
