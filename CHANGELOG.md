@@ -57,3 +57,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   unknown tokens return 404 and expired ones 410 as RFC 9457 problem details.
 - Per-clip cost from OpenRouter's generation lookup; recorded as $0 with a warning when unavailable
   (to be confirmed against real OpenRouter).
+- A clip that times out, cannot reach OpenRouter or gets a 5xx answer is retried once
+  (`OpenRouter:RetryDelayMs`, default 1000); the per-request timeout is `OpenRouter:ClipTimeout`
+  (default 2 minutes). A clip that still fails ends the call with an error naming the clip and the
+  clips already saved, e.g. `ERROR: OpenRouter did not answer for clip 5 of 12 (timeout, retried once).
+  Clips 1–4 are saved; run the same request again to continue.` — running it again pays only for the
+  missing clips.
+- An out-of-credit (402) or rejected-key (401) OpenRouter answer is not retried and is reported as such,
+  asking the caller to contact an administrator; the key never appears in the result or the log.
+- LRU cache eviction: every `Storage:EvictionIntervalMinutes` (default 10) the gateway removes the
+  least-recently-used clips until the cache fits `Storage:CacheMaxGb` (default 10; the gateway refuses
+  to start when it is 0 or less), and removes download links that expired more than 24 hours ago.

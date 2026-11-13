@@ -18,4 +18,13 @@ public sealed class OpenRouterOptions
     /// 500, 1000, 2000, 4000, then 8000 seven times (about 63.5 s).
     /// </summary>
     public int[]? CostLookupDelaysMs { get; set; }
+
+    /// <summary>
+    /// How long one OpenRouter request (a clip, or a cost lookup) may take before it counts as a
+    /// timeout. Default 2 minutes.
+    /// </summary>
+    public TimeSpan ClipTimeout { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Wait, in milliseconds, before the one retry of a timed-out, unreachable or 5xx clip. Default 1000.</summary>
+    public int RetryDelayMs { get; set; } = 1000;
 }

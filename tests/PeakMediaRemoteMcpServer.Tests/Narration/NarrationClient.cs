@@ -40,12 +40,12 @@ public sealed class NarrationClient : IAsyncDisposable
 
     public string AccessToken { get; }
 
-    public static async Task<NarrationClient> StartAsync(string email = "pat@example.com")
+    public static async Task<NarrationClient> StartAsync(string email = "pat@example.com", IDictionary<string, string?>? overrides = null)
     {
         var stub = await StubOidcIssuer.StartAsync();
         var openRouter = await FakeOpenRouter.StartAsync();
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var host = await GatewayTestHost.StartAsync(stub, openRouter, services => services.AddSingleton<TimeProvider>(clock));
+        var host = await GatewayTestHost.StartAsync(stub, openRouter, services => services.AddSingleton<TimeProvider>(clock), overrides);
         var signedIn = await TestSignIn.SignInAsync(host.Client, stub, StubUser.For(email));
         return new NarrationClient(stub, openRouter, host, clock, signedIn.AccessToken);
     }

@@ -53,6 +53,9 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
         _app = app;
     }
 
+    /// <summary>The fake's <c>/api/v1</c> root on a real port (set by <see cref="StartListeningAsync"/>).</summary>
+    public string? BaseUrl { get; private set; }
+
     /// <summary>Words per minute of the audio returned for a clip's text (default 150).</summary>
     public Func<string, double> WpmFor { get; set; } = _ => 150;
 
@@ -61,6 +64,12 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
 
     /// <summary>When it returns a status code, the speech request fails with it instead of answering audio.</summary>
     public Func<FakeSpeechRequest, int?> StatusOverride { get; set; } = _ => null;
+
+    /// <summary>
+    /// When it returns true, the speech request is never answered: the fake waits until the caller gives
+    /// up (the request is aborted), as a hung upstream would.
+    /// </summary>
+    public Func<FakeSpeechRequest, bool> NoAnswer { get; set; } = _ => false;
 
     /// <summary>
     /// How many cost lookups of each generation answer 404 before its statistics appear (default 0).
@@ -78,12 +87,24 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        var app = builder.Build();
-        var fake = new FakeOpenRouter(app);
-        app.MapPost("/api/v1/audio/speech", fake.SpeechAsync);
-        app.MapGet("/api/v1/generation", fake.Generation);
-        await app.StartAsync();
+        return await StartAsync(builder);
+    }
+
+    /// <summary>The fake on real Kestrel at <c>http://127.0.0.1:&lt;free port&gt;</c>, for a gateway run as a child process.</summary>
+    public static async Task<FakeOpenRouter> StartListeningAsync()
+    {
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        var fake = await StartAsync(builder);
+        fake.BaseUrl = $"{fake._app.Urls.First().TrimEnd('/')}/api/v1";
         return fake;
+    }
+
+    /// <summary>How many speech requests carried exactly <paramref name="text"/>.</summary>
+    public int RequestsFor(string text)
+    {
+        return _requests.Count(r => r.Input == text);
     }
 
     /// <summary>Counts spoken words the way the gateway does: mood tags such as &lt;Warm&gt; are not words.</summary>
@@ -113,6 +134,16 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
         await _app.DisposeAsync();
     }
 
+    private static async Task<FakeOpenRouter> StartAsync(WebApplicationBuilder builder)
+    {
+        var app = builder.Build();
+        var fake = new FakeOpenRouter(app);
+        app.MapPost("/api/v1/audio/speech", fake.SpeechAsync);
+        app.MapGet("/api/v1/generation", fake.Generation);
+        await app.StartAsync();
+        return fake;
+    }
+
     private IResult Generation(string id)
     {
         var seen = _lookups.AddOrUpdate(id, 1, (_, count) => count + 1);
@@ -136,6 +167,20 @@ public sealed partial class FakeOpenRouter : IAsyncDisposable
             Authorization = request.Headers.Authorization.ToString(),
         };
         _requests.Enqueue(received);
+
+        if (NoAnswer(received))
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(60), request.HttpContext.RequestAborted);
+            }
+            catch (OperationCanceledException)
+            {
+                // The caller gave up, as it should.
+            }
+
+            return Results.StatusCode(504);
+        }
 
         if (StatusOverride(received) is { } status)
         {

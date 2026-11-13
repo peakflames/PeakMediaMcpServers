@@ -141,14 +141,18 @@ public partial class Program
         services.AddSingleton<IClipStore, ClipStore>();
         services.AddSingleton(sp => CostLookupSchedule.FromMilliseconds(
             sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.CostLookupDelaysMs));
+        services.AddSingleton(sp => SpeechRetryPolicy.FromMilliseconds(
+            sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.RetryDelayMs));
         services.AddHttpClient<OpenRouterSpeechClient>(OpenRouterHttpClientName, (sp, client) =>
         {
             var options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
-            client.Timeout = TimeSpan.FromMinutes(2);
+            client.Timeout = options.ClipTimeout;
         });
         services.AddTransient<NarrationService>();
+        services.AddSingleton<CacheEvictor>();
+        services.AddHostedService<CacheEvictionService>();
     }
 
     private static void PrepareStorage(WebApplication app)

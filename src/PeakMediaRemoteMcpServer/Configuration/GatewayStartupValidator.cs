@@ -32,6 +32,9 @@ public static class GatewayStartupValidator
     public const string ResourceMismatchMessage =
         "McpAuth:Resource must equal Broker:IssuerUri followed by /mcp. Set both to the gateway's public URL and restart.";
 
+    public const string CacheMaxGbInvalidMessage =
+        "Storage:CacheMaxGb must be greater than 0. Set it to the most disk space, in GB, the audio cache may use (e.g. 10) and restart.";
+
     public static Result Validate(IConfiguration configuration)
     {
         var mcpAuth = configuration.GetSection(McpAuthOptions.SectionName).Get<McpAuthOptions>() ?? new McpAuthOptions();
@@ -76,6 +79,12 @@ public static class GatewayStartupValidator
         if (!string.Equals(mcpAuth.Resource.TrimEnd('/'), $"{broker.NormalizedIssuerUri}/mcp", StringComparison.Ordinal))
         {
             return Result.Fail(ResourceMismatchMessage);
+        }
+
+        var storage = configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
+        if (!(storage.CacheMaxGb > 0) || double.IsInfinity(storage.CacheMaxGb))
+        {
+            return Result.Fail(CacheMaxGbInvalidMessage);
         }
 
         return Result.Ok();

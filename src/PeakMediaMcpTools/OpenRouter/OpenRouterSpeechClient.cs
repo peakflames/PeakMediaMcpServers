@@ -30,10 +30,16 @@ public sealed class CostLookupSchedule(IReadOnlyList<TimeSpan> delays)
 /// is never logged). Each clip is one <c>POST audio/speech</c> asking for raw PCM with zero data
 /// retention; the real cost comes later from <c>GET generation?id=</c> (<see cref="LookUpCostAsync"/>).
 /// </summary>
-public sealed class OpenRouterSpeechClient(HttpClient http, CostLookupSchedule schedule)
+public sealed class OpenRouterSpeechClient(HttpClient http, CostLookupSchedule schedule, SpeechRetryPolicy? retryPolicy = null)
 {
     public const string GenerationIdHeader = "X-Generation-Id";
 
+    private readonly SpeechRetryPolicy _retry = retryPolicy ?? SpeechRetryPolicy.Default;
+
+    /// <summary>
+    /// Synthesizes one clip. A timeout, a broken connection or a 5xx answer is tried once more after the
+    /// retry delay; 401, 402 and other answers are not. A failure is a <see cref="SpeechError"/>.
+    /// </summary>
     public async Task<Result<SpeechAudio>> SynthesizeAsync(
         TtsModelOptions model,
         string voice,
@@ -54,24 +60,50 @@ public sealed class OpenRouterSpeechClient(HttpClient http, CostLookupSchedule s
             body["instructions"] = style;
         }
 
+        var json = body.ToJsonString();
+        var first = await TrySynthesizeAsync(model.Id, json, cancellationToken);
+        if (first.IsSuccess || first.Errors[0] is not SpeechError { Kind: var kind } || !SpeechError.IsTransient(kind))
+        {
+            return first;
+        }
+
+        Log.Warning("Retrying OpenRouter speech request for {Model} once after {Kind}", model.Id, kind);
+        await Task.Delay(_retry.Delay, cancellationToken);
+        var second = await TrySynthesizeAsync(model.Id, json, cancellationToken);
+        if (second.IsSuccess || second.Errors[0] is not SpeechError failed)
+        {
+            return second;
+        }
+
+        return Result.Fail<SpeechAudio>(new SpeechError(failed.Kind, failed.Status, retried: true));
+    }
+
+    private async Task<Result<SpeechAudio>> TrySynthesizeAsync(string modelId, string json, CancellationToken cancellationToken)
+    {
         try
         {
-            using var content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var response = await http.PostAsync("audio/speech", content, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                Log.Warning("OpenRouter speech request for {Model} answered {Status}", model.Id, (int)response.StatusCode);
-                return Result.Fail<SpeechAudio>($"OpenRouter answered {(int)response.StatusCode}");
+                var status = (int)response.StatusCode;
+                Log.Warning("OpenRouter speech request for {Model} answered {Status}", modelId, status);
+                return Result.Fail<SpeechAudio>(new SpeechError(SpeechError.KindFor(status), status, retried: false));
             }
 
             var pcm = await response.Content.ReadAsByteArrayAsync(cancellationToken);
             var generationId = response.Headers.TryGetValues(GenerationIdHeader, out var ids) ? ids.FirstOrDefault() : null;
             return Result.Ok(new SpeechAudio(pcm, generationId));
         }
-        catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        catch (Exception ex) when (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            Log.Warning("OpenRouter speech request for {Model} failed: {Kind}", model.Id, ex.GetType().Name);
-            return Result.Fail<SpeechAudio>(new Error("OpenRouter could not be reached").CausedBy(ex));
+            Log.Warning("OpenRouter speech request for {Model} timed out", modelId);
+            return Result.Fail<SpeechAudio>(new SpeechError(SpeechFailureKind.Timeout, null, retried: false));
+        }
+        catch (HttpRequestException ex)
+        {
+            Log.Warning("OpenRouter speech request for {Model} failed: {Kind}", modelId, ex.GetType().Name);
+            return Result.Fail<SpeechAudio>(new SpeechError(SpeechFailureKind.Unreachable, null, retried: false));
         }
     }
 
