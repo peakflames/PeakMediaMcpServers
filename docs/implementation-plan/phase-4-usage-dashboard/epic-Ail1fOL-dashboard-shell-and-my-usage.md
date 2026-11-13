@@ -1,7 +1,7 @@
 # Epic Ail1fOL: Dashboard shell and My Usage
 
 **Phase:** 4 — Usage dashboard
-**Status:** In Progress
+**Status:** Implemented — 2026-11-13
 **Dependencies:** Epic EYGrros (Quotas and usage — usage and quota figures)
 **Planned by:** Todd Schavey
 **Planned:** 2026-11-12
@@ -44,7 +44,7 @@ My Usage (S-01) is the first reference screen: it renders the loading, empty, er
 | TOR-09-9Orj70T | `docs/requirements/09-ux-baseline.feature.md` |
 | TOR-09-gadlg25 | `docs/requirements/09-ux-baseline.feature.md` |
 | TOR-09-ZbKGrFs | `docs/requirements/09-ux-baseline.feature.md` |
-| TOR-09-fjQhX70 | `docs/requirements/09-ux-baseline.feature.md` |
+| TOR-09-qu5yesw | `docs/requirements/09-ux-baseline.feature.md` |
 | TOR-09-NtBVF41 | `docs/requirements/09-ux-baseline.feature.md` |
 | TOR-09-BLJrVJ6 | `docs/requirements/09-ux-baseline.feature.md` |
 

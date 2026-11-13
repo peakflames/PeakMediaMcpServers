@@ -1,0 +1,227 @@
+@page "/"
+@attribute [Authorize(Policy = McpAuthSetup.DashboardPolicy)]
+@implements IDisposable
+@inject DashboardUsageService Usage
+@inject ILogger<MyUsage> Logger
+
+<PageTitle>My usage — PeakMedia Gateway</PageTitle>
+
+<div class="page-header">
+    <h1>My usage</h1>
+    <div class="month-field">
+        <label for="month-select">Month</label>
+        <BbNativeSelect TValue="string" Id="month-select" Value="_month" ValueChanged="OnMonthChanged">
+            @foreach (var label in _months)
+            {
+                <option value="@label">@label</option>
+            }
+        </BbNativeSelect>
+    </div>
+    @if (_status is not null && _state is LoadState.Empty or LoadState.Populated)
+    {
+        <p class="page-meta">@_status.Month · resets @UsageText.Utc(_status.ResetsUtc)</p>
+    }
+</div>
+
+@switch (_state)
+{
+    case LoadState.Loading:
+        <div class="state-panel" data-state="loading">
+            <div class="loading-row">
+                <p role="status">Loading your usage…</p>
+                @if (_showCancel)
+                {
+                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="Cancel">Cancel</BbButton>
+                }
+            </div>
+        </div>
+        break;
+
+    case LoadState.Cancelled:
+        <div class="state-panel" data-state="cancelled">
+            <p role="status">Loading was cancelled.</p>
+            <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync">Retry</BbButton>
+        </div>
+        break;
+
+    case LoadState.Error:
+        <BbAlert Variant="AlertVariant.Danger" data-state="error">
+            <BbAlertDescription>Couldn't load your usage. Check your connection and try again.</BbAlertDescription>
+        </BbAlert>
+        <div class="loading-row" style="margin-top: 0.75rem;">
+            <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync">Retry</BbButton>
+        </div>
+        break;
+
+    case LoadState.Empty:
+        <div class="state-panel" data-state="empty">
+            <p class="state-title">No usage in @_status!.Month</p>
+            <p class="muted">Narration you request through the peak-media tools in Claude Code appears here. Your quota is @UsageText.Dollars(_status.Quota) for the month.</p>
+            <BbButton Variant="ButtonVariant.Outline" OnClick="GoToCurrentMonth">Go to current month</BbButton>
+        </div>
+        break;
+
+    case LoadState.Populated:
+        @if (_status!.IsOverQuota)
+        {
+            <BbAlert Variant="AlertVariant.Warning" Class="over-quota-alert" data-over-quota>
+                <BbAlertDescription>You have reached your monthly quota (@UsageText.Dollars(_status.Spent) of @UsageText.Dollars(_status.Quota)). Narration is paused until @UsageText.Utc(_status.ResetsUtc). Ask an administrator to raise your quota.</BbAlertDescription>
+            </BbAlert>
+            <div style="height: 1rem;"></div>
+        }
+        <div class="stats" data-state="populated">
+            @foreach (var (label, value) in Stats(_status))
+            {
+                <BbCard Class="@(label == "Spent" ? "stat stat-lead" : "stat")" data-stat="@label">
+                    <BbCardContent Class="stat-body">
+                        <p class="stat-label">@label</p>
+                        <p class="stat-value">@value</p>
+                    </BbCardContent>
+                </BbCard>
+            }
+        </div>
+        <p class="footnote">Same figures the my_usage tool returns. Amounts in US dollars; dates in UTC.</p>
+        break;
+}
+
+@code {
+    /// <summary>After this long a load offers a Cancel button (UX Baseline: Progress feedback).</summary>
+    public static readonly TimeSpan CancelOfferedAfter = TimeSpan.FromSeconds(10);
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private enum LoadState { Loading, Cancelled, Error, Empty, Populated }
+
+    private IReadOnlyList<string> _months = [];
+    private string _month = string.Empty;
+    private LoadState _state = LoadState.Loading;
+    private UsageStatus? _status;
+    private bool _showCancel;
+    private CancellationTokenSource? _load;
+
+    protected override void OnInitialized()
+    {
+        _months = Usage.MonthLabels();
+        _month = Usage.CurrentMonthLabel;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Only the interactive render loads: the first (server) render shows the loading state at once.
+        if (firstRender)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _load?.Cancel();
+        var load = new CancellationTokenSource();
+        _load = load;
+        _state = LoadState.Loading;
+        _status = null;
+        _showCancel = false;
+        // Also called from OnAfterRenderAsync, where nothing re-renders on its own.
+        await InvokeAsync(StateHasChanged);
+        _ = OfferCancelLaterAsync(load);
+
+        try
+        {
+            var user = AuthenticationState is null ? new ClaimsPrincipal() : (await AuthenticationState).User;
+            var result = await Usage.GetAsync(user, _month, load.Token);
+            if (!ReferenceEquals(_load, load))
+            {
+                return;
+            }
+
+            if (result.IsFailed)
+            {
+                Logger.LogWarning("My Usage could not be loaded: {Problem}", result.Errors[0].Message);
+                _state = LoadState.Error;
+            }
+            else
+            {
+                _status = result.Value;
+                var empty = _status.Spent == 0m && _status.ClipsSynthesized == 0 && _status.CacheHits == 0;
+                _state = empty ? LoadState.Empty : LoadState.Populated;
+            }
+        }
+        catch (OperationCanceledException) when (load.IsCancellationRequested)
+        {
+            if (ReferenceEquals(_load, load))
+            {
+                _state = LoadState.Cancelled;
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_load, load))
+            {
+                _showCancel = false;
+                load.Dispose();
+                _load = null;
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OfferCancelLaterAsync(CancellationTokenSource load)
+    {
+        try
+        {
+            await Task.Delay(CancelOfferedAfter, load.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        await InvokeAsync(() =>
+        {
+            if (ReferenceEquals(_load, load) && _state == LoadState.Loading)
+            {
+                _showCancel = true;
+                StateHasChanged();
+            }
+        });
+    }
+
+    private void Cancel()
+    {
+        _load?.Cancel();
+    }
+
+    private async Task OnMonthChanged(string? value)
+    {
+        _month = value ?? Usage.CurrentMonthLabel;
+        await LoadAsync();
+    }
+
+    private async Task GoToCurrentMonth()
+    {
+        _month = Usage.CurrentMonthLabel;
+        await LoadAsync();
+    }
+
+    private static IEnumerable<(string Label, string Value)> Stats(UsageStatus status)
+    {
+        yield return ("Spent", UsageText.Dollars(status.Spent));
+        yield return ("Quota", UsageText.Dollars(status.Quota));
+        yield return ("Remaining", UsageText.Dollars(status.Remaining));
+        yield return ("Clips synthesized", status.ClipsSynthesized.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        yield return ("Cache hits", status.CacheHits.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        yield return ("Resets", UsageText.Utc(status.ResetsUtc));
+    }
+
+    public void Dispose()
+    {
+        _load?.Cancel();
+    }
+}

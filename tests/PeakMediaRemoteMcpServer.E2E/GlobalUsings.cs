@@ -1,0 +1,16 @@
+global using System.Globalization;
+global using System.Text.RegularExpressions;
+global using Microsoft.AspNetCore.Builder;
+global using Microsoft.AspNetCore.Hosting;
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Time.Testing;
+global using Microsoft.Playwright;
+global using PeakMediaMcpTools.Narration;
+global using PeakMediaRemoteMcpServer.Auth;
+global using PeakMediaRemoteMcpServer.Broker.Storage;
+global using PeakMediaRemoteMcpServer.Storage;
+global using PeakMediaRemoteMcpServer.Usage;
+global using PeakMediaStubAuthorizationServer;
+global using PeakMediaTestSupport;
+global using Xunit;

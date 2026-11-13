@@ -18,7 +18,7 @@ public sealed record StubRequest(string Method, string Path, IReadOnlyDictionary
 /// Test double for the organization's OIDC provider (Okta), on real Kestrel at
 /// <c>http://127.0.0.1:&lt;free port&gt;</c>. Serves discovery, JWKS, <c>/authorize</c> (auto-approves
 /// the configured next user, or refuses with an OAuth error) and <c>/token</c> (checks the client
-/// secret and PKCE, returns an RS256 ID token with <c>iss</c>, <c>aud</c>, <c>sub</c>, <c>email</c>,
+/// secret — <c>client_secret_basic</c> or <c>client_secret_post</c> — and PKCE, returns an RS256 ID token with <c>iss</c>, <c>aud</c>, <c>sub</c>, <c>email</c>,
 /// <c>groups</c>, <c>nonce</c>, <c>exp</c>). Records every request. Tests never call real Okta.
 /// </summary>
 public sealed class StubOidcIssuer : IAsyncDisposable
@@ -124,7 +124,7 @@ public sealed class StubOidcIssuer : IAsyncDisposable
             ["subject_types_supported"] = new[] { "public" },
             ["id_token_signing_alg_values_supported"] = new[] { "RS256" },
             ["code_challenge_methods_supported"] = new[] { "S256" },
-            ["token_endpoint_auth_methods_supported"] = new[] { "client_secret_basic" },
+            ["token_endpoint_auth_methods_supported"] = new[] { "client_secret_basic", "client_secret_post" },
         }));
 
         app.MapGet("/jwks", () =>
@@ -172,7 +172,11 @@ public sealed class StubOidcIssuer : IAsyncDisposable
         {
             var form = await request.ReadFormAsync();
             var expected = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{Uri.EscapeDataString(ClientId)}:{Uri.EscapeDataString(ClientSecret)}"));
-            if (request.Headers.Authorization.ToString() != expected)
+            var basicOk = request.Headers.Authorization.ToString() == expected;
+            var postOk = string.IsNullOrEmpty(request.Headers.Authorization.ToString())
+                && form["client_id"] == ClientId
+                && form["client_secret"] == ClientSecret;
+            if (!basicOk && !postOk)
             {
                 return Results.Json(new { error = "invalid_client" }, statusCode: 401);
             }

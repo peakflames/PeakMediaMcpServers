@@ -51,6 +51,7 @@ public partial class Program
         return WebApplication.CreateBuilder(new WebApplicationOptions
         {
             Args = args,
+            ApplicationName = typeof(Program).Assembly.GetName().Name,
             ContentRootPath = AppContext.BaseDirectory,
         });
     }
@@ -75,6 +76,7 @@ public partial class Program
         AddNarration(builder.Services);
         builder.Services.AddBroker();
         builder.Services.AddCallerAuthentication();
+        AddDashboard(builder.Services);
 
         builder.Services
             .AddMcpServer(options =>
@@ -94,6 +96,7 @@ public partial class Program
         app.UseRouting();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseAntiforgery();
 
         app.MapGet("/version", () => Results.Json(new { name = Identity.Name, version = Identity.Version }))
             .AllowAnonymous();
@@ -106,7 +109,20 @@ public partial class Program
         app.MapMethods("/mcp", [HttpMethods.Get, HttpMethods.Delete], () => Results.StatusCode(StatusCodes.Status405MethodNotAllowed))
             .RequireAuthorization();
 
+        app.MapDashboardEndpoints();
+        app.MapStaticAssets();
+        app.MapRazorComponents<PeakMediaRemoteMcpServer.Components.App>()
+            .AddInteractiveServerRenderMode();
+
         return app;
+    }
+
+    /// <summary>The usage dashboard: Blazor (Interactive Server) with Blazor Blueprint UI.</summary>
+    private static void AddDashboard(IServiceCollection services)
+    {
+        services.AddRazorComponents().AddInteractiveServerComponents();
+        services.AddCascadingAuthenticationState();
+        BlazorBlueprint.Components.ServiceCollectionExtensions.AddBlazorBlueprintComponents(services);
     }
 
     private static void AddStorage(IServiceCollection services)
@@ -154,6 +170,8 @@ public partial class Program
         });
         services.AddSingleton<UsageStore>();
         services.AddSingleton<QuotaStore>();
+        services.AddSingleton<UsageStatusReader>();
+        services.AddSingleton<DashboardUsageService>();
         services.AddSingleton<IUsageLedger, UsageLedger>();
         services.AddTransient<ISpeechClient>(sp => sp.GetRequiredService<OpenRouterSpeechClient>());
         services.AddTransient<NarrationService>();

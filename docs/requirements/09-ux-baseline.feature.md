@@ -60,11 +60,12 @@ Scenario: [TOR-09-7aP7tWP] The dashboard shall allow every interactive control t
     And pressing Enter on the focused "Save" button should submit the quota form
     And continuing to press Tab should move focus out of the page content and back to the first control
 
-Scenario: [TOR-09-fjQhX70] The dashboard shall display a visible focus indicator on the focused control that is not hidden behind the app header
+Scenario: [TOR-09-qu5yesw] The dashboard shall display a visible focus indicator on the focused control that is not hidden behind the app header
     Given "pat@example.com" is on My Usage (S-01) at a viewport height of 480 CSS px, scrolled to the bottom
     When the person presses Shift+Tab until each control has held focus once
     Then every focused control should have a computed outline or box-shadow that differs from its unfocused style
-    And every focused control's bounding box should lie within the viewport and outside the app header's bounding box
+    And every focused control outside the app header should have a bounding box within the viewport that does not overlap the app header's bounding box
+    And every focused control inside the app header should have a bounding box within the viewport
 
 Scenario: [TOR-09-YFn4LMC] The dashboard shall move focus into a modal dialog on open, keep Tab within it, and return focus to the invoking control on close
     Given an administrator is on User Detail (S-03) for "pat@example.com", whose quota override is $60.00

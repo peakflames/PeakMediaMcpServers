@@ -60,11 +60,12 @@
       }
     },
     {
-      "id": "TOR-09-fjQhX70",
+      "id": "TOR-09-qu5yesw",
+      "rationale": "Supersedes TOR-09-fjQhX70 (CR-sziqlY7): the header's own controls cannot lie outside the header's box; the not-hidden-behind-the-header check applies to controls outside it.",
       "traces_to": {
         "vision": [],
         "conops": [],
-        "claude_md": [{"section": "UX Baseline", "line": "Keyboard & focus", "paraphrase": "The focused control shows a visible indicator and is never hidden behind the sticky header."}]
+        "claude_md": [{"section": "UX Baseline", "line": "Keyboard & focus", "paraphrase": "The focused control shows a visible indicator; controls outside the header are never hidden behind it and header controls stay in view."}]
       }
     },
     {

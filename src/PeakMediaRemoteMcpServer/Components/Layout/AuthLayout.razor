@@ -1,0 +1,14 @@
+@inherits LayoutComponentBase
+
+@* Signed Out (S-06): the brand only — no navigation, no account. *@
+<div class="app">
+    <header class="app-header" data-app-header>
+        <span class="brand">PeakMedia Gateway</span>
+    </header>
+
+    <main class="app-main" id="main">
+        @Body
+    </main>
+
+    <footer class="app-footer">@Program.Identity.Name v@(Program.Identity.Version)</footer>
+</div>

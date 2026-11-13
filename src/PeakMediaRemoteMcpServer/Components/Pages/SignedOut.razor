@@ -1,0 +1,13 @@
+@page "/signed-out"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout AuthLayout
+
+<PageTitle>You are signed out — PeakMedia Gateway</PageTitle>
+
+<section class="notice-page">
+    <h1>You are signed out</h1>
+    <p>Your dashboard session in this browser has ended. Your MCP clients stay signed in.</p>
+    @* A full page load, so the server starts the sign-in at the organization's provider. *@
+    <BbLink Href="/" data-enhance-nav="false">Sign in</BbLink>
+</section>
