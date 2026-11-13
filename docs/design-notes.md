@@ -328,7 +328,7 @@ deterministic for tests.
 (default 10) on a real `PeriodicTimer`, starting one interval after startup. Tests call `RunOnceAsync` directly.
 
 **Rationale:** Tests run the same pass the background service runs, without waiting for the timer. The timer is not
-the injected `TimeProvider`, so a test clock cannot stop the sweep from running in production.
+the injected `TimeProvider`, so tests that advance the fake clock never trigger a background pass.
 
 ---
 
@@ -341,6 +341,8 @@ the injected `TimeProvider`, so a test clock cannot stop the sweep from running 
   may time out before that.
 - **No Serilog redactor exists.** The Security Baseline suggests one. Instead, `SecretsInLogTests` guards that no code
   path logs the key or the client secret.
+- **`.autopilot/` is tracked.** The autopilot test-change log (`.autopilot/test-changes.jsonl`) is committed on
+  feature branches, and `.autopilot/` is not in `.gitignore`.
 - **`ClipCacheKey.IsWellFormed` is unused.** Dead code; remove or use it when the cache key is parsed from a URL.
 - **Tool failures are normal text results, not `isError: true`.** This satisfies TOR-01-Ji4u6Ta as written.
   Revisit if MCP clients need the error flag.
