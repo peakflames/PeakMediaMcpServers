@@ -74,6 +74,13 @@ Prerequisites: .NET 11 SDK (`brew install --cask dotnet-sdk`), Python 3.11+, and
 `python3 -m venv .venv && .venv/bin/pip install psutil fastmcp` (Homebrew's Python refuses global
 `pip install`; brew's `fastmcp` formula is the CLI only and cannot be imported, and `psutils` is unrelated).
 Local runs need `OpenRouter__ApiKey` and the `McpAuth` settings in the environment (see Security Baseline).
+`build.py start` and `run` do **not** read `.env` — export it first in the same command:
+`set -a; source .env; set +a; .venv/bin/python build.py start`. (`build.py smoke` and `test-live` read
+`OpenRouter__ApiKey` from `.env` themselves.)
+
+`build.py smoke` needs port 5108 free — it refuses (exit 1) while the app is running, so run it before
+`start` or after `stop`. Each run signs in as `smoke@example.com` against the real `data/peakmedia.db`, so
+that user appears in the dashboard's usage lists; it is the smoke gate, not a stray account.
 
 Verification runs against the real, running project with its real local data. Never mock the
 project's own API or database to make a check pass. (The OpenRouter upstream and the Okta issuer
@@ -285,8 +292,8 @@ Run every applicable check before marking an epic Implemented or Complete:
 - **Tests:** `.venv/bin/python build.py test` (tests/)
 - **Lint / format:** `dotnet format PeakMediaMcpServers.sln --verify-no-changes`
 - **Live upstream:** `.venv/bin/python build.py test-live` — one real OpenRouter call (~$0.001); must report 1 passed, 0 skipped. Needs a real key in `.env` or `PEAK_MEDIA_LIVE_OPENROUTER_API_KEY`.
-- **Run the tool:** `.venv/bin/python build.py smoke` lists the tools (starts and stops its own gateway against the test sign-in server; no browser); then `.venv/bin/python build.py start`, `curl http://localhost:5108/version` → `{"name":"PeakMediaRemoteMcpServer","version":"<semver>"}`, `.venv/bin/python build.py stop`; stdio: `dotnet run --project src/PeakMediaMcpServer -- --version` → `PeakMediaMcpServer v<semver>`, exit 0
-- **Release checks (by hand — not epic gates; `/peak-workflow:wrapup-epic` and autopilot skip them):** with the real Okta settings in the environment, `.venv/bin/python build.py start`, then `.venv/bin/python build.py mcp tools --oauth` and sign in through Okta in the browser — the tool list comes back; `.venv/bin/python build.py stop`.
+- **Run the tool:** `.venv/bin/python build.py smoke` lists the tools (starts and stops its own gateway against the test sign-in server; no browser; needs port 5108 free, so it runs first); then `.venv/bin/python build.py start`, `curl http://localhost:5108/version` → `{"name":"PeakMediaRemoteMcpServer","version":"<semver>"}`, `.venv/bin/python build.py stop`; stdio: `dotnet run --project src/PeakMediaMcpServer -- --version` → `PeakMediaMcpServer v<semver>`, exit 0
+- **Release checks (by hand — not epic gates; `/peak-workflow:wrapup-epic` and autopilot skip them):** with the real Okta settings exported from `.env` (`set -a; source .env; set +a`), `.venv/bin/python build.py start`, then `.venv/bin/python build.py mcp tools --oauth` and sign in through Okta in the browser — the tool list comes back; `.venv/bin/python build.py stop`.
 - **Visual / console (UI only):** `playwright-cli` against the running dashboard (`.venv/bin/python build.py start`, then `http://localhost:5108/`), signed in through the stub issuer's test helper
 
 ## Important Reminders
