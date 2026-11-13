@@ -1,0 +1,620 @@
+{
+  "feature_id": "08",
+  "feature_file": "08-usage-dashboard.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-08-7gPJfwq",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "The dashboard is signed in through the same OIDC provider, so a browser with no session must be sent to sign in first."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 1,
+            "paraphrase": "A user who opens the gateway in a browser is redirected through the same Okta sign-in."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-RiNk9re",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "Every signed-in person lands on their own My usage page after sign-in."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 1,
+            "paraphrase": "After sign-in the user sees My Usage, and the session cookie is set."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-nLHs0pq",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "Members of the admin group get the admin navigation, which is the only place admins see organization usage."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 1,
+            "paraphrase": "The admin signs in and the gateway recognizes the admin group, then shows My Usage."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-XOxyf4r",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§9 — Design Direction",
+            "paraphrase": "Admin-only pages are absent from a non-admin's navigation, so non-admins see only My usage."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 2,
+            "paraphrase": "A non-admin's navigation shows the My usage link only, with no admin links."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-D1L4ilb",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "Admins also see Usage, User detail and Cache, so their navigation carries those three links beside My usage."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 2,
+            "paraphrase": "The admin's navigation shows My usage, Usage and Cache."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-iCZ63da",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "Admin pages are reserved for admins, so direct visits by non-admins are refused."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 4,
+            "paraphrase": "Opening an admin address directly returns a forbidden status and a Not Authorized page."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-Z8HzUrl",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "A non-admin refused an admin page is offered a route back to their own usage."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 4,
+            "paraphrase": "The Not Authorized page offers a Go to My usage link."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-F0Gau1p",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "A person can end the browser session from the header, and the dashboard then requires sign-in again."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 5,
+            "paraphrase": "The user signs out from the header and the browser session ends."
+          },
+          {
+            "scenario": "S5",
+            "step": 9,
+            "paraphrase": "The admin signs out from the header and sees the signed-out confirmation."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-qmHrQZN",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "After signing out, a person can start a new sign-in from the signed-out page."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 9,
+            "paraphrase": "The signed-out page offers a Sign in link to start again."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-leBAXoJ",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [
+          {
+            "section": "UX Baseline",
+            "line": "Layout floor",
+            "paraphrase": "Collapsing the header controls into a sheet on narrow viewports is how the app shell stays usable at 320 CSS px without horizontal scrolling or clipped controls."
+          }
+        ]
+      },
+      "rationale": "Derived from the App Shell section of docs/product-vision-planning/ux/screens.md: below 480 px the nav, email and Sign out collapse into a Sheet behind a menu trigger. It is the mechanism that keeps the header usable at the 320 px layout floor."
+    },
+    {
+      "id": "TOR-08-fX9XW5F",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§9 — Design Direction",
+            "paraphrase": "The dashboard must be readable in light and dark, so the person can choose a theme that persists."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-v8yv7CR",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "My usage shows the same figures as the my_usage tool, so the browser and Claude Code agree."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 3,
+            "paraphrase": "My Usage shows spent, quota, remaining, clips, cache hits and reset, the same figures my_usage returns."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-TZrQMGu",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "My usage can show any calendar month, which lets a person compare past months with the current one."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 3,
+            "paraphrase": "My Usage shows the figures for the month chosen in the Month select."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-0OVqiet",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "The dashboard tells a person when their quota is used up and when narration resumes."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S4",
+            "step": 3,
+            "paraphrase": "The over-quota message names the spend, quota and reset time, as the dashboard notice does."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-6kh4CnB",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "A person can return the month view to the current month in one step after browsing another month."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S8",
+            "step": 3,
+            "paraphrase": "The Month select on My Usage can be set back to the current month."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-rxZtbxT",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "A person whose usage did not load can retry without leaving the page, so they still see where they stand."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-kX399h8",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§5 — Goals & Success Criteria (MVP)",
+            "paraphrase": "Goal G8 requires admins to see every user's month-to-date spend on the Usage page."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 3,
+            "paraphrase": "The Usage page lists one row per user for the chosen month, sorted by spend with the highest first."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-nzR0l2p",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§5 — Goals & Success Criteria (MVP)",
+            "paraphrase": "Goal G3 requires the Usage page to flag each over-quota user, so admins see who has hit the limit."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 3,
+            "paraphrase": "A user whose spend has reached their quota shows an OVER badge in the Status column."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-nFpaAG7",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "The Usage page gives admins an organization-wide total for the month, not only per-user rows."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 3,
+            "paraphrase": "The Usage table ends with a Total footer row for the month."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-rnr0ApF",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "A month with no usage must be shown as empty, so an admin can tell it apart from a page that failed to load."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-S8MYBHC",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "When usage cannot be loaded, the Usage page says so and offers a retry, so admins are not left with a blank table."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-sfJ3IWh",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "Admins drill from the per-user table into one user's detail, the User detail page the vision names."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 4,
+            "paraphrase": "The admin clicks a user's email on the Usage table and opens that user's detail."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-JeFRxDI",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§9 — Design Direction",
+            "paraphrase": "The dashboard shows no narration text anywhere, so the user detail lists clips without their text."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 4,
+            "paraphrase": "User detail shows the user's rows for the month, never the narration text."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-i1syL2k",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "The User detail page summarizes one user's month against their quota, which is the admin's per-person view."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 4,
+            "paraphrase": "User detail summarizes the month's spend against quota, clips and cache-hit rate."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-iUG0WAC",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "User detail shows the user's current quota and whether it is the default, so an admin knows what they are changing."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 5,
+            "paraphrase": "The quota field shows the current figure and notes it is the default when no override exists."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-QNNE1fW",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§5 — Goals & Success Criteria (MVP)",
+            "paraphrase": "Goal G8 requires an admin to change one user's quota from the dashboard."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 5,
+            "paraphrase": "The admin enters a new monthly quota and saves it, and the page confirms the change."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-bjHma3b",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "A failed quota save is reported in text and keeps the entered amount, so the admin can retry without retyping."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-6Vzjnrg",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "An admin can remove a user's override and return them to the default quota."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 7,
+            "paraphrase": "The admin clears an override via Use default and a confirmation, and the page confirms the reset."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-MCIZVXn",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "User detail can show any month, so an admin can review a user's past rows."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 4,
+            "paraphrase": "User detail shows the user's usage rows for the month chosen in the Month select."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-wX5QWUB",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "An admin can always return from a user's detail to the Usage page through a breadcrumb or a back link."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-bydYtvm",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "When a user's detail cannot load, the page says so and offers a retry, so the admin is not left guessing."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-VHkMu93",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "The Cache page shows size against the cap, clip count, hit rate and evictions, which tells the admin whether the cache pays off."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 8,
+            "paraphrase": "The Cache page shows size against the size cap, clip count, hit rate and evictions this month."
+          }
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-5ZEXDBu",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "A cache with no clips is shown as empty, so an admin can tell an empty cache from a failed one."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-NeOMGCI",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "When cache statistics cannot load, the Cache page says so and offers a retry."
+          }
+        ],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-08-irZrgRw",
+      "traces_to": {
+        "vision": [
+          {
+            "section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)",
+            "paraphrase": "The Cache page can be refreshed on demand so the admin sees current figures."
+          }
+        ],
+        "conops": [
+          {
+            "scenario": "S5",
+            "step": 8,
+            "paraphrase": "The admin reviews current cache figures on the Cache page."
+          }
+        ],
+        "claude_md": []
+      }
+    }
+  ],
+  "coverage_gaps": []
+}

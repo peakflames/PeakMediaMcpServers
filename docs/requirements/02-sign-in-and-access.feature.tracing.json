@@ -1,0 +1,137 @@
+{
+  "feature_id": "02",
+  "feature_file": "02-sign-in-and-access.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-02-8R5ouns",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "The gateway acts as an OAuth 2.1 resource and authorization server, so an unauthenticated MCP call must be pointed at the sign-in metadata."}],
+        "conops": [{"scenario": "S1", "step": 2, "paraphrase": "Claude Code receives a 401 with a pointer to protected-resource metadata and then discovers the authorization server."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-eXSTt0Q",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "The gateway is its own authorization server, so its protected-resource metadata must name itself."}],
+        "conops": [{"scenario": "S1", "step": 2, "paraphrase": "Claude Code discovers from the resource metadata that the gateway is the authorization server to use."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-VOsRKOw",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "The broker must publish the endpoints MCP clients need, with PKCE, for the OAuth flow to work with no pre-shared client ID."}],
+        "conops": [{"scenario": "S1", "step": 2, "paraphrase": "Claude Code reads the gateway's authorization metadata to learn where to authorize, exchange tokens and register."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-Mb6PQo5",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "Dynamic client registration is on, so the add command needs no client ID to paste."}],
+        "conops": [{"scenario": "S1", "step": 3, "paraphrase": "Claude Code registers itself with the gateway through dynamic client registration before opening the browser."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-PosyPLa",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "Sign-in is delegated to the organization's OIDC provider, so the authorize request must be handed on to it."}],
+        "conops": [{"scenario": "S1", "step": 4, "paraphrase": "The browser is sent from the gateway to the organization's sign-in page, where the user signs in."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-DU3EQVF",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "The broker uses PKCE, so an authorization request without a code challenge must not proceed to sign-in."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The sign-in row of the functional summary names PKCE as part of the OAuth broker."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-QFiwMY7",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "After sign-in the gateway returns an authorization code to the client, which is exchanged for tokens."}],
+        "conops": [
+          {"scenario": "S1", "step": 5, "paraphrase": "The gateway handles the identity provider's callback, reads the subject, email and groups, and returns a code to Claude Code's callback."},
+          {"scenario": "S1", "step": 6, "paraphrase": "Claude Code exchanges the code for an access token and a refresh token."}
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-x3ci8yI",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "The broker's PKCE requirement means a code exchange with the wrong verifier must be refused."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The sign-in row of the functional summary names PKCE as part of the OAuth broker."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-kx8Nl0i",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "The broker keeps a client signed in by renewing access from a refresh token, so users are not asked to sign in again each time."}],
+        "conops": [{"scenario": "S1", "step": 6, "paraphrase": "Claude Code holds a refresh token alongside the access token issued after sign-in."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-KmwGCjA",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "Only organization members assigned to the app can sign in, so a refusal must leave the person with no token."}],
+        "conops": [{"scenario": "S1", "step": 8, "paraphrase": "A user who is not assigned to the Okta app is refused at sign-in and never receives a token."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-hKpbfCf",
+      "traces_to": {
+        "vision": [{"section": "§5 — Goals & Success Criteria (MVP)", "paraphrase": "Goal G7 requires a real Okta sign-in started with the add command and no client ID to paste."}],
+        "conops": [
+          {"scenario": "S1", "step": 1, "paraphrase": "The user adds the gateway with one command and then signs in through Okta in the browser."},
+          {"scenario": "S1", "step": 7, "paraphrase": "The user sees the peak-media server connected in Claude Code after signing in."}
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-NwWTAqU",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "Only tokens the gateway itself issued and that are still valid are accepted, which is the single access check the vision asks for."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The sign-in and access table requires one access rule for tools and pages, which an expired or foreign token must fail."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-dj60B0R",
+      "traces_to": {
+        "vision": [
+          {"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "Every signed-in caller gets the same tools, and admin power lives only in the dashboard, so the tool list cannot depend on role."},
+          {"section": "§6 — MVP Scope Summary / Usage dashboard (built last, after narration and quotas)", "paraphrase": "The admin role exists only in the dashboard, so the tool list must not change for admins."}
+        ],
+        "conops": [{"scenario": "S1", "step": 7, "paraphrase": "The tools shown in Claude Code are the same for every user regardless of role."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-Dc8Z0Ge",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "Every caller is identified by OIDC subject, so usage must stay attached to one person and never leak to another."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The functional summary's single access rule gives users their own data and gives admins all data."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-02-GIUxnmc",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "Identity comes from the signed-in OIDC subject, so a caller-asserted identity in a header or query must not count."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The sign-in and access table requires one access rule, so no request-supplied user value can grant access."}],
+        "claude_md": []
+      }
+    }
+  ],
+  "coverage_gaps": []
+}

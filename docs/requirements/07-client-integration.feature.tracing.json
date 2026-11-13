@@ -1,0 +1,46 @@
+{
+  "feature_id": "07",
+  "feature_file": "07-client-integration.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-07-LaYp8xj",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Client integration contract", "paraphrase": "A written client integration document states the tool contract so the skill author can code against it."}],
+        "conops": [],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-07-1XYMIbC",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Client integration contract", "paraphrase": "The document records the skill's selection order and that a gateway error never falls back to a personal key."}],
+        "conops": [
+          {"scenario": "S2", "step": 1, "paraphrase": "The skill prefers a connected peak-media server over any personal key."},
+          {"scenario": "S4", "step": 6, "paraphrase": "The skill reports a gateway error to the user and does not fall back to a personal key."}
+        ],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-07-8MvsuuM",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Client integration contract", "paraphrase": "The document describes the download-into-cache step the skill performs for gateway results."}],
+        "conops": [{"scenario": "S2", "step": 8, "paraphrase": "The client downloads each URL into the local cache under its cache key, skipping files already present, and checks each WAV."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-07-akAqnvh",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Client integration contract", "paraphrase": "The document gives the add commands for both servers under the one name peak-media, so the skills see one tool name."}],
+        "conops": [
+          {"scenario": "S1", "step": 1, "paraphrase": "The user adds the gateway with a single claude mcp add command."},
+          {"scenario": "S6", "step": 1, "paraphrase": "The solo user registers the stdio server under the same peak-media name."}
+        ],
+        "claude_md": []
+      }
+    }
+  ],
+  "coverage_gaps": []
+}

@@ -1,0 +1,184 @@
+{
+  "feature_id": "09",
+  "feature_file": "09-ux-baseline.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-09-upSE1xN",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Screen states", "paraphrase": "A data-bearing screen shows a distinct loading message in visible text while its data loads."}]
+      }
+    },
+    {
+      "id": "TOR-09-9Orj70T",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Screen states", "paraphrase": "An empty data-bearing screen says so in visible text, so it is not confused with loading or failure."}]
+      }
+    },
+    {
+      "id": "TOR-09-gadlg25",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Screen states", "paraphrase": "A failed load shows an error in visible text with a retry control and no stale figures."}]
+      }
+    },
+    {
+      "id": "TOR-09-ZbKGrFs",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Screen states", "paraphrase": "A populated screen shows its data and no loading, empty or error text."}]
+      }
+    },
+    {
+      "id": "TOR-09-dty904j",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Screen states", "paraphrase": "The empty User Detail screen states its emptiness in text while keeping the quota form usable."}]
+      }
+    },
+    {
+      "id": "TOR-09-CYbsdon",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Screen states", "paraphrase": "A failed User Detail load shows its error in visible text with a retry control."}]
+      }
+    },
+    {
+      "id": "TOR-09-7aP7tWP",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Keyboard & focus", "paraphrase": "Every control on the User Detail screen is reachable and operable by keyboard, with no trap."}]
+      }
+    },
+    {
+      "id": "TOR-09-fjQhX70",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Keyboard & focus", "paraphrase": "The focused control shows a visible indicator and is never hidden behind the sticky header."}]
+      }
+    },
+    {
+      "id": "TOR-09-YFn4LMC",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Keyboard & focus", "paraphrase": "A modal dialog takes focus on open, keeps Tab inside, and returns focus to the control that opened it."}]
+      }
+    },
+    {
+      "id": "TOR-09-pQcPvui",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Forms", "paraphrase": "Every form field has a programmatically associated label, and its visible label focuses the field."}]
+      }
+    },
+    {
+      "id": "TOR-09-RA5qSsd",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Forms", "paraphrase": "An invalid field is flagged in text beside it that names the fix, and focus moves to it after a failed submit."}]
+      }
+    },
+    {
+      "id": "TOR-09-do58nOS",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Destructive actions", "paraphrase": "An irreversible change needs explicit confirmation whose safe option is the default, and Escape cancels it."}]
+      }
+    },
+    {
+      "id": "TOR-09-TpkiHjX",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Progress feedback", "paraphrase": "Any operation longer than one second shows a visible progress indicator within one second, and its trigger is disabled meanwhile."}]
+      }
+    },
+    {
+      "id": "TOR-09-NtBVF41",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Progress feedback", "paraphrase": "A load running longer than ten seconds offers a Cancel control, and cancelling shows a visible result with a retry."}]
+      }
+    },
+    {
+      "id": "TOR-09-cTG2frO",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Layout floor", "paraphrase": "Every screen works at 320 CSS px wide with no horizontal scrolling, overlap or clipped controls."}]
+      }
+    },
+    {
+      "id": "TOR-09-1DjTmDv",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Layout floor", "paraphrase": "Every screen stays usable at 200 percent zoom, with no horizontal scrolling and no clipped controls."}]
+      }
+    },
+    {
+      "id": "TOR-09-BLJrVJ6",
+      "traces_to": {
+        "vision": [{"section": "§9 — Design Direction", "paraphrase": "The dashboard must stay readable in both light and dark themes, so text contrast must hold in each."}],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Contrast", "paraphrase": "Body text meets a 4.5 to 1 contrast ratio, and large text meets 3 to 1, in both light and dark themes."}]
+      }
+    },
+    {
+      "id": "TOR-09-P5YL2JO",
+      "traces_to": {
+        "vision": [{"section": "§9 — Design Direction", "paraphrase": "The dashboard must stay readable in both light and dark themes, so control boundaries and focus rings must be visible in each."}],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Contrast", "paraphrase": "Control borders and focus indicators meet a 3 to 1 contrast ratio against adjacent colors in both themes."}]
+      }
+    },
+    {
+      "id": "TOR-09-GFQ80Xs",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Reduced motion", "paraphrase": "When the OS reduce-motion preference is set, the dialog appears instantly instead of animating."}]
+      }
+    },
+    {
+      "id": "TOR-09-9irho1R",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Navigation", "paraphrase": "Each screen has a unique document title that identifies the page."}]
+      }
+    },
+    {
+      "id": "TOR-09-hdlqc7J",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Navigation", "paraphrase": "Each screen has exactly one visible H1 that matches its document title."}]
+      }
+    },
+    {
+      "id": "TOR-09-PVdyo7H",
+      "traces_to": {
+        "vision": [],
+        "conops": [],
+        "claude_md": [{"section": "UX Baseline", "line": "Navigation", "paraphrase": "The primary navigation marks the current page's item with aria-current."}]
+      }
+    }
+  ],
+  "coverage_gaps": []
+}

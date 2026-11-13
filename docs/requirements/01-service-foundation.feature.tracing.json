@@ -1,0 +1,160 @@
+{
+  "feature_id": "01",
+  "feature_file": "01-service-foundation.feature.md",
+  "generator": "haiku-sub-agent via /peak-workflow:capture-requirements",
+  "requirements": [
+    {
+      "id": "TOR-01-9TZEFBD",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Version reporting is named as a cross-cutting concern, so anyone can check which build is deployed."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Version exposure", "paraphrase": "The HTTP server publishes its name and semantic version at a public endpoint so a deployment can be checked without signing in."}]
+      }
+    },
+    {
+      "id": "TOR-01-p6jE1nT",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Version reporting is a cross-cutting concern, and one version should be visible through every channel."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Version exposure", "paraphrase": "The MCP initialize handshake must carry the same version as the public version endpoint, so clients and operators agree."}]
+      }
+    },
+    {
+      "id": "TOR-01-zQT2lRH",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Version reporting is a cross-cutting concern that also covers the local stdio binary."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Version exposure", "paraphrase": "The stdio server prints a single name-and-version line for its version flag and exits 0, which is the CLI form of version exposure."}]
+      }
+    },
+    {
+      "id": "TOR-01-p3K2fH3",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Version reporting is a cross-cutting concern that covers the stdio server as well as the gateway."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Version exposure", "paraphrase": "The stdio handshake reports the same version that the version flag prints."}]
+      }
+    },
+    {
+      "id": "TOR-01-0wIkgxQ",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "The vision requires version exposure in the log, so every log file names the build that wrote it."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Version stamped at log startup", "paraphrase": "The gateway's first startup record names the product and its semantic version."}]
+      }
+    },
+    {
+      "id": "TOR-01-7VjhchC",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Version exposure in logs is a cross-cutting concern that also covers the stdio server."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Version stamped at log startup", "paraphrase": "The stdio server's first startup record names the product and its semantic version."}]
+      }
+    },
+    {
+      "id": "TOR-01-VoM1MJ7",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Logging is a cross-cutting concern that the vision sets as plain text, never carrying narration text, tokens or keys."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Logging convention", "paraphrase": "Every gateway log record uses the project's plain-text layout of timestamp, three-letter level and message."}]
+      }
+    },
+    {
+      "id": "TOR-01-mDo59qy",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Logging is a cross-cutting concern, and the vision names a daily file alongside stderr for the gateway."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Logging convention", "paraphrase": "Gateway logs go to a daily rolling file under logs/ as well as to stderr, the configured sink pair for the convention."}]
+      }
+    },
+    {
+      "id": "TOR-01-6Smkepz",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Logging is a cross-cutting concern that covers the stdio server's own log stream and file."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Logging convention", "paraphrase": "The stdio server writes plain-text records to stderr and to a daily file, following the same logging layout as the gateway."}]
+      }
+    },
+    {
+      "id": "TOR-01-spPaZpz",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Errors must name the problem and the next action, which applies to a bad command-line invocation too."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Exit code convention", "paraphrase": "An invalid invocation of the stdio server exits with code 2 and names the next step on stderr."}]
+      }
+    },
+    {
+      "id": "TOR-01-6Q14afY",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Logging to stderr and a file is a cross-cutting concern, which keeps the stdio protocol channel clean."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "stdout / stderr discipline", "paraphrase": "The stdio server writes only MCP JSON-RPC messages to stdout and sends every log and diagnostic line to stderr."}]
+      }
+    },
+    {
+      "id": "TOR-01-9QIaBsB",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "Logging to stderr and a file is a cross-cutting concern for the gateway as well."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "stdout / stderr discipline", "paraphrase": "The gateway writes nothing to stdout, so all of its diagnostics stay on stderr and in the log file."}]
+      }
+    },
+    {
+      "id": "TOR-01-Ji4u6Ta",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "The vision requires tool errors in the ERROR form that names the problem and the fix, not internals."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Error message standard", "paraphrase": "Every MCP tool failure starts with ERROR: and names the problem and next action, without exception types or stack traces."}]
+      }
+    },
+    {
+      "id": "TOR-01-B0JJ3Jt",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "The vision requires errors on non-MCP HTTP endpoints to follow the problem-details form with a useful next step."}],
+        "conops": [],
+        "claude_md": [{"section": "Tool Hygiene & Operability", "line": "Error message standard", "paraphrase": "A failed request to a non-MCP HTTP endpoint returns an RFC 9457 problem-details body whose detail names the fix."}]
+      }
+    },
+    {
+      "id": "TOR-01-2lmaDWE",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "The gateway refuses to start unless sign-in is configured, because an open gateway would spend the shared credit for anyone."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The functional summary states the gateway refuses to start without sign-in configuration or the OpenRouter key, with no anonymous mode."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-01-EzMqmjt",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "Startup must fail when the organization's sign-in provider is not fully configured, so the gateway never runs without sign-in."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The functional summary requires a refusal to start when sign-in configuration is missing, with no anonymous mode."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-01-a1AeUH3",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Gateway: sign-in and access", "paraphrase": "The vision says the gateway refuses to start when the OpenRouter key is missing, so no caller can reach a gateway that cannot synthesize."}],
+        "conops": [{"scenario": "§7", "step": null, "paraphrase": "The functional summary requires refusing to start without the OpenRouter key."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-01-x5DXvRT",
+      "traces_to": {
+        "vision": [{"section": "§6 — MVP Scope Summary / Cross-cutting Concerns", "paraphrase": "The vision keeps tokens and keys out of logs, so the shared key and the sign-in secret must never be written there."}],
+        "conops": [{"scenario": "§8", "step": null, "paraphrase": "The operational constraints say the OpenRouter key and the OIDC client secret come only from environment variables, which this test guards in the log."}],
+        "claude_md": []
+      }
+    },
+    {
+      "id": "TOR-01-65SaYiJ",
+      "traces_to": {
+        "vision": [{"section": "§10 — Data Strategy", "paraphrase": "The SQLite database and cached audio files on the mounted volume hold the usage, quota and cache state that must survive a restart."}],
+        "conops": [{"scenario": "§8", "step": null, "paraphrase": "The deployment constraint places the single container's data volume at a fixed path, which is where persisted state must live."}],
+        "claude_md": []
+      }
+    }
+  ],
+  "coverage_gaps": []
+}
