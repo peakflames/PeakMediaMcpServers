@@ -46,6 +46,8 @@ CONSOLE_FILE = Path("logs/peak-media-mcp.console.log")
 LOG_DIR = Path("src/PeakMediaRemoteMcpServer/bin/Debug/net11.0/logs")
 LOG_GLOB = "PeakMediaRemoteMcpServer_*.log"
 DEV_PORT = 5108
+# A gateway access token for `build.py mcp` (sent as a Bearer token, never printed).
+ACCESS_TOKEN_VARIABLE = "PEAK_MEDIA_ACCESS_TOKEN"
 
 
 def latest_log_file() -> Optional[Path]:
@@ -340,7 +342,8 @@ def search_log(pattern: Optional[str] = None, tail: int = 0, level: Optional[str
 
 
 async def run_mcp_command(subcommand: str, tool_name: Optional[str] = None, 
-                          tool_args: Optional[str] = None, timeout: int = 200) -> int:
+                          tool_args: Optional[str] = None, timeout: int = 200,
+                          oauth: bool = False) -> int:
     """Execute MCP client commands against the running server.
     
     Args:
@@ -348,6 +351,9 @@ async def run_mcp_command(subcommand: str, tool_name: Optional[str] = None,
         tool_name: Name of the tool to call (for 'call' subcommand)
         tool_args: JSON string of arguments for tool call
         timeout: Timeout in seconds for operations (default: 200)
+        oauth: Sign in through the browser with fastmcp's OAuth client
+    
+    A gateway access token in PEAK_MEDIA_ACCESS_TOKEN is sent as a Bearer token (never printed).
     
     Returns:
         Exit code (0 for success, 1 for error)
@@ -367,15 +373,19 @@ async def run_mcp_command(subcommand: str, tool_name: Optional[str] = None,
     
     mcp_url = f"http://localhost:{DEV_PORT}/mcp"
 
-    # /mcp is behind sign-in. Without a gateway access token the server answers 401; say so plainly.
-    if probe_mcp_requires_sign_in(mcp_url):
+    # /mcp is behind sign-in: use a gateway access token from the environment, or sign in through the
+    # browser (--oauth). Without either the server answers 401; say so plainly.
+    access_token = os.environ.get(ACCESS_TOKEN_VARIABLE, "").strip()
+    auth = access_token if access_token else ("oauth" if oauth else None)
+    if auth is None and probe_mcp_requires_sign_in(mcp_url):
         print(f"✗ {mcp_url} requires sign-in (HTTP 401).")
-        print("  Connect from an MCP client that signs in through the gateway's OAuth flow.")
+        print(f"  Sign in through the browser with: python build.py mcp {subcommand} --oauth")
+        print(f"  or export a gateway access token in {ACCESS_TOKEN_VARIABLE} and retry.")
         return 1
 
     try:
         # Pass timeout to client constructor - this applies to all MCP operations
-        client = McpClient(mcp_url, timeout=timeout)
+        client = McpClient(mcp_url, timeout=timeout, auth=auth)
         
         async with client:
             if subcommand == "ping":
@@ -386,6 +396,12 @@ async def run_mcp_command(subcommand: str, tool_name: Optional[str] = None,
             elif subcommand == "info":
                 # Show server info from initialization
                 init_result = client.initialize_result
+                if init_result is None and getattr(client, "server_info", None) is not None:
+                    # fastmcp 4 may connect through server/discover instead of initialize.
+                    print("MCP Server Information:")
+                    print(f"  Name: {client.server_info.name}")
+                    print(f"  Version: {client.server_info.version}")
+                    return 0
                 if init_result:
                     print("MCP Server Information:")
                     print(f"  Name: {init_result.serverInfo.name}")
@@ -496,9 +512,9 @@ def probe_mcp_requires_sign_in(mcp_url: str) -> bool:
 
 
 def run_mcp(subcommand: str, tool_name: Optional[str] = None, 
-            tool_args: Optional[str] = None, timeout: int = 200) -> int:
+            tool_args: Optional[str] = None, timeout: int = 200, oauth: bool = False) -> int:
     """Synchronous wrapper for run_mcp_command."""
-    return asyncio.run(run_mcp_command(subcommand, tool_name, tool_args, timeout))
+    return asyncio.run(run_mcp_command(subcommand, tool_name, tool_args, timeout, oauth))
 
 
 def print_usage() -> None:
@@ -518,6 +534,8 @@ def print_usage() -> None:
     print("  mcp info                 - Show MCP server information")
     print("  mcp tools                - List available MCP tools")
     print("  mcp call <tool> ['{...}'] - Call an MCP tool with JSON args")
+    print("  mcp <subcommand> --oauth - Sign in through the browser first (gateway OAuth flow)")
+    print(f"  {ACCESS_TOKEN_VARIABLE}=<token> - Use this gateway access token instead (never printed)")
     print("")
     print("Log Commands:")
     print("  log                      - Show last 50 lines of log")
@@ -592,18 +610,20 @@ def main() -> None:
             print("Usage: python build.py mcp <ping|info|tools|call> [args]")
             sys.exit(1)
         
-        subcommand = sys.argv[2]
+        oauth = "--oauth" in sys.argv[2:]
+        mcp_args = [a for a in sys.argv[2:] if a != "--oauth"]
+        subcommand = mcp_args[0] if mcp_args else ""
         tool_name = None
         tool_args = None
         
         # For 'call' subcommand, parse tool name and optional args
         if subcommand == "call":
-            if len(sys.argv) >= 4:
-                tool_name = sys.argv[3]
-            if len(sys.argv) >= 5:
-                tool_args = sys.argv[4]
+            if len(mcp_args) >= 2:
+                tool_name = mcp_args[1]
+            if len(mcp_args) >= 3:
+                tool_args = mcp_args[2]
         
-        sys.exit(run_mcp(subcommand, tool_name, tool_args))
+        sys.exit(run_mcp(subcommand, tool_name, tool_args, oauth=oauth))
     
     # Help command
     if command in ["help", "--help", "-h"]:

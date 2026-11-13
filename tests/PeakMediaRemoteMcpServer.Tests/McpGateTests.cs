@@ -5,7 +5,8 @@ public class McpGateTests
     private const string InitializeBody =
         """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}""";
 
-    // Epic Xq463wX: /mcp is behind authorization from day one; until the broker exists every request is 401.
+    // /mcp is behind authorization: a request without a valid gateway access token is 401 (Epic Xq463wX;
+    // the broker that issues tokens arrived in Epic 7BASFbp — see ResourceServerGateTests).
     [Fact]
     public async Task Mcp_without_token_is_401()
     {

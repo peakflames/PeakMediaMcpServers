@@ -1,6 +1,6 @@
 # PeakMedia MCP Servers — Design Decision Notes
 
-> **Status:** Decisions as built through the walking-skeleton epic (Xq463wX, v0.1.0). Decisions
+> **Status:** Decisions as built through the sign-in epic (7BASFbp, v0.1.0). Decisions
 > from later epics are added by `/peak-workflow:refresh-docs` from their session handoffs.
 
 ---
@@ -97,11 +97,10 @@ verified by a test run under `TZ=Pacific/Kiritimati`.
 **Rationale:** Every run's first log record is the startup line, including refused starts, so an
 operator reading the log always sees which version ran and why it stopped.
 
-## 11. Bearer Gate on `/mcp` Before the Broker Exists
+## 11. Bearer Gate on `/mcp`
 
-**Decision:** `/mcp` uses JwtBearer with issuer, audience, lifetime and signature validation and an
-**empty** trusted-key set. Every bearer token is rejected until the broker epic (7BASFbp) supplies
-signing keys, issuer and discovery documents. `GET` and `DELETE` `/mcp` sit behind the same gate, so an
+**Decision:** `/mcp` uses JwtBearer with issuer, audience, lifetime and signature validation against the
+gateway's own signing key (Epic 7BASFbp; the walking skeleton shipped it with an empty key set). `GET` and `DELETE` `/mcp` sit behind the same gate, so an
 unauthenticated caller always gets 401; a signed-in caller gets 405, which the stateless Streamable HTTP
 transport requires (it has no GET stream).
 
@@ -135,13 +134,13 @@ daily file through one configuration.
 interleave those files. In-process tests (`GatewayTestHost`) stay separate because they use a fresh temp
 database per test.
 
-## 15. `build.py mcp` Probes `/mcp` First
+## 15. `build.py mcp` Signs In Or Says Why Not
 
-**Decision:** `build.py mcp <command>` probes `/mcp` before running any command and prints
-"requires sign-in (HTTP 401)" plainly until the broker epic lands.
+**Decision:** `build.py mcp <command>` sends a gateway access token from `PEAK_MEDIA_ACCESS_TOKEN` as a
+Bearer token (never printed), or with `--oauth` signs in through the browser with fastmcp's OAuth client.
+Without either it probes `/mcp` and prints "requires sign-in (HTTP 401)" with both options.
 
-**Rationale:** Until sign-in exists, the MCP commands cannot succeed. A plain message names the cause instead
-of a protocol error.
+**Rationale:** A plain message names the cause and the next action instead of a protocol error.
 
 ## 16. Container Runs as Non-Root
 
@@ -150,9 +149,61 @@ of a protocol error.
 **Rationale:** The handoff does not record a deliberate choice; this is the SDK container default, and it
 limits what a compromised process can write. The trade-off is in Known Issues (log directory writability).
 
+## 17. The Gateway Is Its Own Authorization Server (Broker)
+
+**Decision:** Ported from BitbucketMcpServers: the gateway runs DCR, `/authorize`, `/token` and issues its
+own RS256 access tokens, delegating the actual sign-in to any OIDC provider (Okta's org authorization
+server in practice). Differences from Bitbucket: upstream is OIDC (discovery from
+`<UpstreamAuthority>/.well-known/openid-configuration`, read lazily so startup never contacts Okta);
+identity comes from the validated ID token (`sub`, `email`, `groups`, nonce) with no user-info call; no
+upstream tokens are stored; DCR is always on; no anonymous mode and no static clients; one SQLite
+database (schema v1 in `SchemaMigrator`).
+
+**Rationale:** The launch customer's Okta capabilities are unknown (custom authorization servers and DCR
+are paid Okta features); a plain OIDC web app works on every Okta tier. Claude Code needs DCR to connect
+with no client ID to paste.
+
+## 18. Open DCR Restricted to Loopback Redirect URIs
+
+**Decision:** `/register` accepts only loopback redirect URIs (`127.0.0.1`, `localhost`, `[::1]`, any port)
+plus an explicit `Broker:AllowedRedirectUris` allowlist (empty by default). `/authorize` matches a
+registered URI exactly, ignoring only the port of a loopback URI (RFC 8252 §7.3).
+
+**Rationale:** With open registration, an attacker could register their own redirect URI and mail a victim
+an `/authorize` link; after the victim signs in, the code would go to the attacker. Loopback redirects
+can only reach the victim's own machine. A client secret is issued even to `none` clients because Claude
+Code rejects a registration response without one.
+
+## 19. Access Token Claims and Lifetime
+
+**Decision:** Gateway access token: RS256 JWT, key generated once and persisted in `app_meta` (survives
+restart), claims `iss` = `Broker:IssuerUri`, `aud` = `McpAuth:Resource`, `sub` (Okta subject), `email`,
+`role` (`admin` | `user`), `jti`; 60 minutes. Role is decided once at sign-in: `admin` when the ID token's
+`groups` claim contains `Admin:Group`; refresh re-reads it from `users`.
+
+**Rationale:** Every later epic keys caller records on `sub` and decides access from the token alone
+(`Caller` + `AccessRule`), with no per-request database lookup.
+
+## 20. Refresh Without Re-Contacting Okta
+
+**Decision:** Refresh tokens are the gateway's own opaque secrets, stored hashed, rotated on every use,
+30-day lifetime (`Broker:IssuedRefreshTokenLifetimeDays`). Refresh does not call Okta.
+
+**Rationale:** The gateway never holds Okta tokens, so it has nothing to refresh upstream. The trade-off:
+removing a person from the Okta app refuses new sign-ins immediately, but an existing session continues
+until its refresh token expires (at most 30 days, shortened by lowering the setting).
+
+## 21. One Access Rule
+
+**Decision:** `AccessRule.CanAccess(caller, ownerSubject)` (owner or admin) and `AccessRule.RequireAdmin`
+in `Auth/` are the only place access is decided; `Caller.From(ClaimsPrincipal)` builds the caller only
+from the validated token. The `admin` authorization policy uses the same rule.
+
+**Rationale:** Security Baseline — owner-or-permitted-role, decided in one place every route calls.
+
 ---
 
-## 17. Known Issues and Deferred Work
+## 22. Known Issues and Deferred Work
 
 - **Migration failure does not stop startup.** `PrepareStorage` logs an error and keeps starting when the
   schema migration fails. Decide whether to refuse to start once real tables exist.
@@ -161,5 +212,6 @@ limits what a compromised process can write. The trade-off is in Known Issues (l
 - **Startup-log test reads a shared file.** The startup-log test reads the first record of the shared daily
   file, which may come from an earlier run that day. It stays valid because every run's first record is the
   startup line.
-- **Caller sign-in is not built.** `/mcp` answers 401 to every caller until the broker epic (7BASFbp) lands.
-  Okta round-trip verification is manual against a free Okta developer org.
+- **Real Okta round-trip is operator-observed.** Tests use the stub OIDC issuer; the live Okta sign-in
+  (TOR-02-hKpbfCf) is checked by hand with `tests/manual/TOR-02-hKpbfCf.md`.
+- **Okta removal is not immediate for existing sessions** (§20): up to the refresh-token lifetime.

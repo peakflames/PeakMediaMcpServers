@@ -61,11 +61,13 @@ public partial class Program
 
         builder.Services.Configure<McpAuthOptions>(builder.Configuration.GetSection(McpAuthOptions.SectionName));
         builder.Services.Configure<BrokerOptions>(builder.Configuration.GetSection(BrokerOptions.SectionName));
+        builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.SectionName));
         builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
         builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 
         AddStorage(builder.Services);
-        AddCallerAuthentication(builder.Services, builder.Configuration);
+        builder.Services.AddBroker();
+        builder.Services.AddCallerAuthentication();
 
         builder.Services
             .AddMcpServer(options =>
@@ -86,6 +88,7 @@ public partial class Program
 
         app.MapGet("/version", () => Results.Json(new { name = Identity.Name, version = Identity.Version }))
             .AllowAnonymous();
+        app.MapBrokerEndpoints();
         app.MapMcp("/mcp").RequireAuthorization();
         // Stateless Streamable HTTP serves POST only. Map the other methods behind the same gate so an
         // unauthenticated caller always gets 401 (never a 405 that reveals routing before sign-in);
@@ -120,33 +123,5 @@ public partial class Program
         {
             app.Logger.LogError("Storage could not be prepared: {Problem}. Check Storage:DatabasePath and restart.", migrated.Errors[0].Message);
         }
-    }
-
-    /// <summary>
-    /// The resource-server gate on <c>/mcp</c>: a bearer token signed by the gateway's own
-    /// authorization server, for this resource. No signing key is trusted until the broker
-    /// (Epic 7BASFbp) supplies one, so every bearer token is rejected and <c>/mcp</c> answers 401.
-    /// There is no anonymous fallback and no development login.
-    /// </summary>
-    private static void AddCallerAuthentication(IServiceCollection services, IConfiguration configuration)
-    {
-        var resource = configuration[$"{McpAuthOptions.SectionName}:Resource"] ?? string.Empty;
-        services
-            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                options.MapInboundClaims = false;
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidAudience = resource,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    RequireSignedTokens = true,
-                    IssuerSigningKeys = [],
-                };
-            });
-        services.AddAuthorization();
     }
 }

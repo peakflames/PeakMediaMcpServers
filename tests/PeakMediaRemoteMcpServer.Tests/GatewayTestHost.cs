@@ -2,10 +2,13 @@ namespace PeakMediaRemoteMcpServer.Tests;
 
 /// <summary>
 /// The gateway in-process: built through <see cref="Program.BuildApp"/> on a test server with
-/// in-memory configuration and a fresh temp database per host.
+/// in-memory configuration and a fresh temp database per host. Its public URL G is
+/// <c>http://localhost</c> (the test server's base address).
 /// </summary>
 public sealed class GatewayTestHost : IAsyncDisposable
 {
+    public const string BaseUrl = "http://localhost";
+
     private readonly TempDirectory _data;
     private readonly WebApplication _app;
 
@@ -20,7 +23,43 @@ public sealed class GatewayTestHost : IAsyncDisposable
 
     public IServiceProvider Services => _app.Services;
 
-    public static async Task<GatewayTestHost> StartAsync(IDictionary<string, string?>? overrides = null)
+    /// <summary>A host whose sign-in provider is unreachable — for tests that never sign in.</summary>
+    public static Task<GatewayTestHost> StartAsync(IDictionary<string, string?>? overrides = null)
+    {
+        return StartAsync("http://127.0.0.1:9", "unreachable-client", "test-secret", overrides);
+    }
+
+    /// <summary>A host that delegates sign-in to the stub OIDC issuer.</summary>
+    public static Task<GatewayTestHost> StartAsync(StubOidcIssuer stub, IDictionary<string, string?>? overrides = null)
+    {
+        return StartAsync(stub.Authority, stub.ClientId, stub.ClientSecret, overrides);
+    }
+
+    /// <summary>Counts rows in a gateway table (table names are test constants).</summary>
+    public async Task<long> CountRowsAsync(string table, string? subject = null)
+    {
+        var opened = await Services.GetRequiredService<SqliteConnectionFactory>().OpenAsync();
+        await using var connection = opened.Value;
+        await using var command = connection.CreateCommand();
+        command.CommandText = subject is null
+            ? $"SELECT COUNT(*) FROM {table};"
+            : $"SELECT COUNT(*) FROM {table} WHERE subject = $subject;";
+        if (subject is not null)
+        {
+            command.Parameters.AddWithValue("$subject", subject);
+        }
+
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Client.Dispose();
+        await _app.DisposeAsync();
+        _data.Dispose();
+    }
+
+    private static async Task<GatewayTestHost> StartAsync(string authority, string clientId, string clientSecret, IDictionary<string, string?>? overrides)
     {
         var data = new TempDirectory();
         var builder = Program.CreateBuilder([]);
@@ -28,8 +67,12 @@ public sealed class GatewayTestHost : IAsyncDisposable
         var settings = new Dictionary<string, string?>
         {
             ["McpAuth:Enabled"] = "true",
-            ["McpAuth:Resource"] = "http://localhost/mcp",
-            ["Broker:UpstreamClientSecret"] = "test-secret",
+            ["McpAuth:Resource"] = $"{BaseUrl}/mcp",
+            ["Broker:IssuerUri"] = BaseUrl,
+            ["Broker:UpstreamAuthority"] = authority,
+            ["Broker:UpstreamClientId"] = clientId,
+            ["Broker:UpstreamClientSecret"] = clientSecret,
+            ["Admin:Group"] = TestSignIn.AdminGroup,
             ["OpenRouter:ApiKey"] = "test-key",
             ["Storage:DatabasePath"] = data.File("peakmedia.db"),
         };
@@ -42,12 +85,5 @@ public sealed class GatewayTestHost : IAsyncDisposable
         var app = Program.BuildApp(builder);
         await app.StartAsync();
         return new GatewayTestHost(app, data);
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        Client.Dispose();
-        await _app.DisposeAsync();
-        _data.Dispose();
     }
 }

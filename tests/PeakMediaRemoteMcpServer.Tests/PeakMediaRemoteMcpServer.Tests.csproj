@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\src\PeakMediaRemoteMcpServer\PeakMediaRemoteMcpServer.csproj" />
     <ProjectReference Include="..\TestSupport\PeakMediaTestSupport.csproj" />
     <ProjectReference Include="..\Fakes\PeakMediaTestFakes.csproj" />
+    <ProjectReference Include="..\StubAuthorizationServer\PeakMediaStubAuthorizationServer.csproj" />
   </ItemGroup>
 
 </Project>
