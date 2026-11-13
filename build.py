@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Build script for PeakMediaMcpServers
-Supports: build, run, start, stop, status, test, test-live, mcp, log commands
+Supports: build, run, start, stop, status, test, test-live, smoke, mcp, log commands
 """
 
 import sys
@@ -16,7 +16,9 @@ import subprocess
 import signal
 import time
 import json
+import queue
 import tempfile
+import threading
 import urllib.error
 import xml.etree.ElementTree as ElementTree
 import urllib.request
@@ -55,6 +57,8 @@ LIVE_KEY_VARIABLE = "PEAK_MEDIA_LIVE_OPENROUTER_API_KEY"
 LIVE_TEST_PROJECT = "tests/PeakMediaRemoteMcpServer.Tests/PeakMediaRemoteMcpServer.Tests.csproj"
 LIVE_TEST_FILTER = "Category=LiveOpenRouter"
 ENV_FILE = Path(".env")
+# `build.py smoke`: the test sign-in tool (stub OIDC issuer + the gateway's real sign-in flow).
+STUB_SIGN_IN_PROJECT = "tests/StubSignIn/PeakMediaStubSignIn.csproj"
 
 
 def latest_log_file() -> Optional[Path]:
@@ -104,14 +108,14 @@ def check_status() -> None:
         print("✗ Application is not running")
 
 
-def start_background() -> None:
-    """Start application in background"""
+def start_background(extra_env: Optional[dict] = None) -> bool:
+    """Start application in background; extra_env overrides the environment. True once /version answers."""
     # Check if already running
     existing_pid = get_running_pid()
     if existing_pid:
         print(f"Application is already running (PID: {existing_pid})")
         print("Use 'python build.py stop' to stop it first")
-        return
+        return False
     
     print("Starting application in background...")
     
@@ -122,6 +126,8 @@ def start_background() -> None:
     # Set environment for Development mode
     env = os.environ.copy()
     env["ASPNETCORE_ENVIRONMENT"] = "Development"
+    if extra_env:
+        env.update(extra_env)
     
     # Start process
     if platform.system() == "Windows":
@@ -160,7 +166,7 @@ def start_background() -> None:
                 print(f"✓ Application is running at http://localhost:{DEV_PORT}")
                 print(f"  Version: {response.read().decode('utf-8')}")
                 print(f"  MCP endpoint: http://localhost:{DEV_PORT}/mcp (sign-in required)")
-                return
+                return True
         except (urllib.error.URLError, ConnectionError, TimeoutError):
             time.sleep(0.5)
 
@@ -174,6 +180,7 @@ def start_background() -> None:
     print("  Gateway refuses to start without McpAuth enabled, Broker__UpstreamClientSecret and OpenRouter__ApiKey.")
     if PID_FILE.exists():
         PID_FILE.unlink()
+    return False
 
 
 def stop_background() -> None:
@@ -281,6 +288,130 @@ def run_live_tests() -> int:
         return 1
     print("✓ Live OpenRouter gate passed")
     return 0
+
+
+def read_stub_line(lines: "queue.Queue", stub: subprocess.Popen, prefix: str, timeout: float = 60) -> Optional[str]:
+    """The value of the next `prefix=value` line from the sign-in tool, or None on exit or timeout."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            line = lines.get(timeout=0.5)
+        except queue.Empty:
+            if stub.poll() is not None and lines.empty():
+                return None
+            continue
+        if line is None:
+            return None
+        if line.startswith(prefix + "="):
+            return line[len(prefix) + 1:]
+        if line.startswith("error="):
+            print(f"✗ Test sign-in failed at {line[len('error='):]}.", file=sys.stderr)
+            return None
+    return None
+
+
+def stop_stub(stub: subprocess.Popen) -> None:
+    """Close the sign-in tool's stdin (it exits), or kill it and its children."""
+    try:
+        if stub.stdin and not stub.stdin.closed:
+            stub.stdin.close()
+    except OSError:
+        pass
+    try:
+        stub.wait(timeout=10)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        parent = psutil.Process(stub.pid)
+        for child in parent.children(recursive=True):
+            child.kill()
+        parent.kill()
+    except psutil.NoSuchProcess:
+        pass
+    stub.wait(timeout=5)
+
+
+def run_smoke() -> int:
+    """Run-the-tool gate without a browser: start the gateway against the test sign-in server (stub OIDC
+    issuer in place of Okta), sign in through the gateway's real flow, list the tools, stop everything."""
+    existing_pid = get_running_pid()
+    if existing_pid:
+        print(f"✗ The application is already running (PID: {existing_pid}). Stop it first with: python build.py stop",
+              file=sys.stderr)
+        return 1
+
+    openrouter_key = os.environ.get("OpenRouter__ApiKey", "").strip() or read_env_file_value("OpenRouter__ApiKey")
+    if not openrouter_key:
+        print("✗ OpenRouter__ApiKey is not set. Export it or put it in .env, then rerun build.py smoke.", file=sys.stderr)
+        return 1
+
+    print("Building solution...")
+    if subprocess.run(["dotnet", "build", SOLUTION_PATH]).returncode != 0:
+        print("✗ Build failed. Fix the errors above and rerun build.py smoke.", file=sys.stderr)
+        return 1
+
+    print("Starting the test sign-in server (stub OIDC issuer)...")
+    stub = subprocess.Popen(
+        ["dotnet", "run", "--no-build", "--project", STUB_SIGN_IN_PROJECT],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+    lines: "queue.Queue" = queue.Queue()
+
+    def pump() -> None:
+        for raw in stub.stdout:
+            lines.put(raw.strip())
+        lines.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    gateway_started = False
+    try:
+        authority = read_stub_line(lines, stub, "authority")
+        client_id = read_stub_line(lines, stub, "client_id")
+        client_secret = read_stub_line(lines, stub, "client_secret")
+        if not (authority and client_id and client_secret):
+            print("✗ The test sign-in server did not start. Rerun build.py smoke; if it repeats, run "
+                  f"dotnet run --project {STUB_SIGN_IN_PROJECT} to see why.", file=sys.stderr)
+            return 1
+        print(f"  Test sign-in server at {authority}")
+
+        # Only this gateway process sees the stub settings; the real Okta settings stay as they are elsewhere.
+        gateway_started = start_background(extra_env={
+            "Broker__UpstreamAuthority": authority,
+            "Broker__UpstreamClientId": client_id,
+            "Broker__UpstreamClientSecret": client_secret,
+            "Broker__UpstreamGroupsClaim": "groups",
+            "OpenRouter__ApiKey": openrouter_key,
+        })
+        if not gateway_started:
+            print("✗ The gateway did not start against the test sign-in server. Read the console output above, "
+                  "fix it, and rerun build.py smoke.", file=sys.stderr)
+            return 1
+
+        print("Signing in through the gateway (test sign-in server, no browser)...")
+        stub.stdin.write(f"signin http://localhost:{DEV_PORT}\n")
+        stub.stdin.flush()
+        token = read_stub_line(lines, stub, "token")
+        if not token:
+            print(f"✗ Sign-in through the gateway failed. Check build.py log --level warn and {CONSOLE_FILE}, "
+                  "then rerun build.py smoke.", file=sys.stderr)
+            return 1
+        print("✓ Signed in as smoke@example.com")
+
+        os.environ[ACCESS_TOKEN_VARIABLE] = token
+        try:
+            result = run_mcp("tools")
+        finally:
+            os.environ.pop(ACCESS_TOKEN_VARIABLE, None)
+        if result != 0:
+            print("✗ The tool list did not come back. Read the MCP error above and the gateway log "
+                  "(build.py log --level warn), then rerun build.py smoke.", file=sys.stderr)
+            return 1
+        print("\n✓ Smoke check passed: signed in through the test sign-in server and listed the tools")
+        return 0
+    finally:
+        if gateway_started or get_running_pid():
+            stop_background()
+        stop_stub(stub)
 
 
 def run_dotnet_command(command: str) -> None:
@@ -599,13 +730,15 @@ def print_usage() -> None:
     print("  status       - Check if application is running")
     print("  test         - Run the test suite (dotnet test)")
     print("  test-live    - Run the live OpenRouter test (real spend; fails if skipped)")
+    print("  smoke        - Start the gateway against the test sign-in server, sign in (no browser),")
+    print("                 list the MCP tools, then stop everything (the Run-the-tool gate)")
     print("")
     print("MCP Commands (requires the .venv with fastmcp; /mcp needs sign-in):")
     print("  mcp ping                 - Check MCP server connectivity")
     print("  mcp info                 - Show MCP server information")
     print("  mcp tools                - List available MCP tools")
     print("  mcp call <tool> ['{...}'] - Call an MCP tool with JSON args")
-    print("  mcp <subcommand> --oauth - Sign in through the browser first (gateway OAuth flow)")
+    print("  mcp <subcommand> --oauth - Sign in through the browser first (real Okta — release check)")
     print(f"  {ACCESS_TOKEN_VARIABLE}=<token> - Use this gateway access token instead (never printed)")
     print("")
     print("Log Commands:")
@@ -625,6 +758,7 @@ def print_usage() -> None:
     print("")
     print("Examples:")
     print("  python build.py start                       # Build and start server")
+    print("  python build.py smoke                       # Sign in (test server) and list the tools")
     print("  python build.py mcp tools                   # List all MCP tools")
     print("  python build.py log --level error           # View error logs")
     print("  python build.py stop                        # Stop the server")
@@ -696,6 +830,10 @@ def main() -> None:
         
         sys.exit(run_mcp(subcommand, tool_name, tool_args, oauth=oauth))
     
+    # Run-the-tool gate through the test sign-in server
+    if command == "smoke":
+        sys.exit(run_smoke())
+
     # Live upstream gate
     if command == "test-live":
         sys.exit(run_live_tests())
