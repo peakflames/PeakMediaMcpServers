@@ -44,7 +44,7 @@ public sealed class FocusAndContrastTests(BrowserFixture browser)
     [Fact]
     public async Task TOR_09_qu5yesw_every_focused_control_shows_a_focus_indicator_and_is_not_hidden_behind_the_header()
     {
-        // TOR-09-qu5yesw (supersedes TOR-09-fjQhX70, CR-sziqlY7)
+        // TOR-09-qu5yesw (CR-sziqlY7)
         await using var host = await DashboardHost.StartAsync();
         var page = await browser.NewPageAsync(width: 1024, height: 480);
         await host.SignInAsync(page, StubUser.For(PatEmail));
