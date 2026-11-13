@@ -61,6 +61,7 @@ python build.py stop     # Stop background application
 python build.py status   # Check if application is running
 python build.py run      # Run in foreground
 python build.py test     # Run the test suite (dotnet test)
+python build.py test-live   # One real OpenRouter call (~$0.001); fails if skipped
 python build.py mcp ping|info|tools|call <tool> '<json>'   # Talk to the running server
 python build.py log [pattern] [--tail n] [--level error]   # Search the log file
 ```
@@ -75,8 +76,9 @@ Local runs need `OpenRouter__ApiKey` and the `McpAuth` settings in the environme
 
 Verification runs against the real, running project with its real local data. Never mock the
 project's own API or database to make a check pass. (The OpenRouter upstream and the Okta issuer
-are external — tests use `tests/Fakes/` and the stub JWT issuer; the real round-trip is checked by
-hand against the real services.)
+are external — tests use `tests/Fakes/` and the stub JWT issuer; the real OpenRouter round trip is
+checked by the Live upstream gate (`build.py test-live`), and the real Okta round trip is still
+checked by hand.)
 
 ## Tool Hygiene & Operability
 
@@ -281,6 +283,7 @@ Run every applicable check before marking an epic Implemented or Complete:
 - **Build:** `.venv/bin/python build.py build`
 - **Tests:** `.venv/bin/python build.py test` (tests/)
 - **Lint / format:** `dotnet format PeakMediaMcpServers.sln --verify-no-changes`
+- **Live upstream:** `.venv/bin/python build.py test-live` — one real OpenRouter call (~$0.001); must report 1 passed, 0 skipped. Needs a real key in `.env` or `PEAK_MEDIA_LIVE_OPENROUTER_API_KEY`.
 - **Run the tool:** `.venv/bin/python build.py start` then `curl http://localhost:5108/version` → `{"name":"PeakMediaRemoteMcpServer","version":"<semver>"}` and `.venv/bin/python build.py mcp tools` lists the tools; stdio: `dotnet run --project src/PeakMediaMcpServer -- --version` → `PeakMediaMcpServer v<semver>`, exit 0
 - **Visual / console (UI only):** `playwright-cli` against the running dashboard (`.venv/bin/python build.py start`, then `http://localhost:5108/`), signed in through the stub issuer's test helper
 
