@@ -12,12 +12,35 @@ docker pull peakflames/peak-media-remote-mcp-server
 
 ## Quick Start
 
+Prerequisites: .NET 11 SDK, Python 3.11+, and the project venv
+(`python3 -m venv .venv && .venv/bin/pip install psutil fastmcp`).
+
+The gateway refuses to start without its secrets, which arrive only through the environment:
+
+| Variable | Purpose |
+|---|---|
+| `OpenRouter__ApiKey` | The organization's shared OpenRouter key |
+| `Broker__UpstreamClientSecret` | OIDC client secret of the organization's Okta sign-in app |
+
 ```bash
-python build.py start                  # build and start locally on port 5108
-curl http://localhost:5108/version     # {"name":"PeakMediaRemoteMcpServer","version":"0.1.0"}
+export OpenRouter__ApiKey=...                   # never commit these
+export Broker__UpstreamClientSecret=...
+.venv/bin/python build.py start                 # build and start locally on port 5108
+curl http://localhost:5108/version              # {"name":"PeakMediaRemoteMcpServer","version":"0.1.0"}
+.venv/bin/python build.py test                  # run the test suite
+.venv/bin/python build.py stop
 ```
 
-Point your MCP client at `http://localhost:5108/mcp` (Streamable HTTP) and sign in with Okta.
+Point your MCP client at `http://localhost:5108/mcp` (Streamable HTTP) and sign in with Okta
+(sign-in arrives in a later release; until then `/mcp` answers 401).
+
+### Stdio server (your own OpenRouter key)
+
+```bash
+export PEAK_MEDIA_OPENROUTER_API_KEY=...
+dotnet run --project src/PeakMediaMcpServer -- --version   # PeakMediaMcpServer v0.1.0
+dotnet run --project src/PeakMediaMcpServer                # serve MCP over stdio
+```
 
 ## Documentation
 

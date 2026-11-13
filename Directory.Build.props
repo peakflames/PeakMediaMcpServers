@@ -1,0 +1,15 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- Single source of truth for the product version: container tag, GET /version, the stdio version flag, MCP serverInfo. -->
+    <Version>0.1.0</Version>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- Keep AssemblyInformationalVersion the bare semver (no +commit suffix). -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

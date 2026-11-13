@@ -1,0 +1,152 @@
+namespace PeakMediaRemoteMcpServer;
+
+/// <summary>
+/// The HTTP gateway. Startup order: configure logging → write the startup record → refuse to start
+/// on unsafe configuration (before Kestrel binds) → build and run. Nothing is ever written to
+/// standard output; logs go to standard error and the daily file under <c>logs/</c>.
+/// </summary>
+public partial class Program
+{
+    public const string ServerName = "PeakMediaRemoteMcpServer";
+
+    public static ServerIdentity Identity { get; } = ServerIdentity.From(typeof(Program).Assembly, ServerName);
+
+    public static int Main(string[] args)
+    {
+        var builder = CreateBuilder(args);
+
+        Log.Logger = LoggingSetup.CreateLogger(ServerName, builder.Configuration);
+        try
+        {
+            Log.Information(Identity.StartingMessage);
+
+            var validation = GatewayStartupValidator.Validate(builder.Configuration);
+            if (validation.IsFailed)
+            {
+                Log.Fatal(validation.Errors[0].Message);
+                return 1;
+            }
+
+            var app = BuildApp(builder);
+            app.Run();
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "{Server} stopped unexpectedly. Check the log file under logs/ and restart.", ServerName);
+            return 1;
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
+    }
+
+    /// <summary>Creates the builder with the content root next to the binary, whatever the working directory.</summary>
+    public static WebApplicationBuilder CreateBuilder(string[] args)
+    {
+        return WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            Args = args,
+            ContentRootPath = AppContext.BaseDirectory,
+        });
+    }
+
+    /// <summary>Registers services and maps endpoints. Tests call this directly with a test server.</summary>
+    public static WebApplication BuildApp(WebApplicationBuilder builder)
+    {
+        // The default console logger writes to stdout; the gateway never writes to stdout.
+        builder.Logging.ClearProviders();
+        builder.Services.AddSerilog();
+
+        builder.Services.Configure<McpAuthOptions>(builder.Configuration.GetSection(McpAuthOptions.SectionName));
+        builder.Services.Configure<BrokerOptions>(builder.Configuration.GetSection(BrokerOptions.SectionName));
+        builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
+        builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
+
+        AddStorage(builder.Services);
+        AddCallerAuthentication(builder.Services, builder.Configuration);
+
+        builder.Services
+            .AddMcpServer(options =>
+            {
+                options.ServerInfo = new ModelContextProtocol.Protocol.Implementation { Name = Identity.Name, Version = Identity.Version };
+                // Answer tools/list even before the first tool exists.
+                options.ToolCollection ??= [];
+            })
+            .WithHttpTransport(options => options.Stateless = true)
+            .WithToolsFromAssembly(typeof(ToolErrorFormatter).Assembly);
+
+        var app = builder.Build();
+        PrepareStorage(app);
+
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        app.MapGet("/version", () => Results.Json(new { name = Identity.Name, version = Identity.Version }))
+            .AllowAnonymous();
+        app.MapMcp("/mcp").RequireAuthorization();
+        // Stateless Streamable HTTP serves POST only. Map the other methods behind the same gate so an
+        // unauthenticated caller always gets 401 (never a 405 that reveals routing before sign-in);
+        // a signed-in caller gets 405, as the transport specifies for servers without a GET stream.
+        app.MapMethods("/mcp", [HttpMethods.Get, HttpMethods.Delete], () => Results.StatusCode(StatusCodes.Status405MethodNotAllowed))
+            .RequireAuthorization();
+
+        return app;
+    }
+
+    private static void AddStorage(IServiceCollection services)
+    {
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("PeakMediaRemoteMcpServer.Storage");
+            var environment = sp.GetRequiredService<IHostEnvironment>();
+            var storage = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<StorageOptions>>().Value;
+            var path = DatabasePathResolver.Resolve(storage.DatabasePath, environment.ContentRootPath, logger);
+            var faultSwitch = StorageFaultSwitch.FromEnvironment(
+                Environment.GetEnvironmentVariable(StorageFaultSwitch.VariableName),
+                environment.IsProduction(),
+                logger);
+            return new SqliteConnectionFactory(path, faultSwitch);
+        });
+        services.AddSingleton<SchemaMigrator>();
+    }
+
+    private static void PrepareStorage(WebApplication app)
+    {
+        var migrated = app.Services.GetRequiredService<SchemaMigrator>().MigrateAsync().GetAwaiter().GetResult();
+        if (migrated.IsFailed)
+        {
+            app.Logger.LogError("Storage could not be prepared: {Problem}. Check Storage:DatabasePath and restart.", migrated.Errors[0].Message);
+        }
+    }
+
+    /// <summary>
+    /// The resource-server gate on <c>/mcp</c>: a bearer token signed by the gateway's own
+    /// authorization server, for this resource. No signing key is trusted until the broker
+    /// (Epic 7BASFbp) supplies one, so every bearer token is rejected and <c>/mcp</c> answers 401.
+    /// There is no anonymous fallback and no development login.
+    /// </summary>
+    private static void AddCallerAuthentication(IServiceCollection services, IConfiguration configuration)
+    {
+        var resource = configuration[$"{McpAuthOptions.SectionName}:Resource"] ?? string.Empty;
+        services
+            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.MapInboundClaims = false;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidAudience = resource,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    RequireSignedTokens = true,
+                    IssuerSigningKeys = [],
+                };
+            });
+        services.AddAuthorization();
+    }
+}

@@ -1,0 +1,71 @@
+name: Build and Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v0.1.0
+
+env:
+  IMAGE: peakflames/peak-media-remote-mcp-server
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check tag matches Directory.Build.props
+        id: get_version
+        run: |
+          # Directory.Build.props <Version> is the single source of truth; the tag must agree with it.
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PROPS_VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n 1)"
+          echo "Tag version:   $TAG_VERSION"
+          echo "Props version: $PROPS_VERSION"
+          if [ -z "$PROPS_VERSION" ] || [ "$TAG_VERSION" != "$PROPS_VERSION" ]; then
+            echo "::error::Tag v$TAG_VERSION does not match <Version>$PROPS_VERSION</Version> in Directory.Build.props. Bump the props version or re-tag."
+            exit 1
+          fi
+          echo "version=$PROPS_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.x'
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and publish container to Docker Hub
+        run: |
+          dotnet publish src/PeakMediaRemoteMcpServer/PeakMediaRemoteMcpServer.csproj \
+            -c Release \
+            /t:PublishContainer \
+            --os linux --arch x64 \
+            /p:ContainerRegistry=docker.io
+
+      - name: Tag image as latest
+        run: |
+          docker pull "$IMAGE:${{ steps.get_version.outputs.version }}"
+          docker tag "$IMAGE:${{ steps.get_version.outputs.version }}" "$IMAGE:latest"
+          docker push "$IMAGE:latest"
+
+      - name: Sync README to Docker Hub
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: peakflames/peak-media-remote-mcp-server
+          short-description: ${{ github.event.repository.description }}
+          readme-filepath: ./README.md
+          enable-url-completion: true
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Container build and push failed for ${{ github.ref_name }}"
