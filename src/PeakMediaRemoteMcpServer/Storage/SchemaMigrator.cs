@@ -115,17 +115,20 @@ public sealed class SchemaMigrator
             """),
 
         // 4 — cache overview (Epic G8jMzOz): one row per clip the eviction pass removed, so the admin
-        // Cache screen can count "evicted this month". A system record of the shared cache with no
-        // caller owner; it is read only through the admin-gated CacheStatsReader. Times are Unix
-        // milliseconds (UTC); counting starts when this migration is applied.
+        // Cache screen can count "evicted this month". Each row is owned by `created_by_subject` —
+        // copied from the evicted clip's audio_cache row, the subject who created it — and is read
+        // only through the admin-gated CacheStatsReader. Times are Unix milliseconds (UTC); counting
+        // starts when this migration is applied.
         (4, """
             CREATE TABLE cache_evictions (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                cache_key  TEXT NOT NULL,
-                at_utc     INTEGER NOT NULL,
-                size_bytes INTEGER NOT NULL
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                cache_key          TEXT NOT NULL,
+                created_by_subject TEXT NOT NULL,
+                at_utc             INTEGER NOT NULL,
+                size_bytes         INTEGER NOT NULL
             );
             CREATE INDEX ix_cache_evictions_at ON cache_evictions(at_utc);
+            CREATE INDEX ix_cache_evictions_created_by_subject ON cache_evictions(created_by_subject);
             """),
     ];
 

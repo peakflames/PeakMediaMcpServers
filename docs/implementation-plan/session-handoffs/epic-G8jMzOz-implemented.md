@@ -24,7 +24,7 @@
 - **Backend** — `UsageStore.ListMonthAsync` (one grouped, parameterized query; admin only),
   `AdminUsageService` (sorting, OVER, totals, hit rates), `CacheStatsReader` (size, cap, clips, this
   month's hit rate across all users, evictions this month; admin only), and migration 4
-  `cache_evictions`, written by `CacheEvictor` once per evicted clip. All reads honor the test fault switch.
+  `cache_evictions` (with `created_by_subject` owner column), written by `CacheEvictor` once per evicted clip. All reads honor the test fault switch.
 - **Shared loader** — `Components/PageLoad.cs`: Loading → Loaded / Error / Cancelled, Cancel offered after
   10 s, a newer load supersedes an older one. My Usage is unchanged.
 
@@ -71,8 +71,8 @@ All other anchors: no deviation.
 - **Clips** on Usage counts every requested clip (synthesized + cache hits); Cache-hit rate = hits / clips,
   rounded to a whole percent. The Total's hit rate is computed from the summed counts.
 - **Evicted this month** needs a data source the gateway did not have (evictions were only logged):
-  migration 4 adds `cache_evictions` (system record, no caller owner, read only through the admin-gated
-  `CacheStatsReader`). Counting starts when the migration is applied, as the Cache footnote says.
+  migration 4 adds `cache_evictions`, owned like every table: its `created_by_subject` column is copied
+  from the evicted clip's `audio_cache` row; read only through the admin-gated `CacheStatsReader`. Counting starts when the migration is applied, as the Cache footnote says.
 - **GB** on Cache means GiB (2^30 bytes), matching `Storage:CacheMaxGb`; one decimal (`0.#`).
 - **Admin gate** is one component (`AdminOnly`) calling `AccessRule`; the data services check the admin
   role again (`AccessRule.RequireAdmin`), so a page that forgot the wrapper still reads nothing.

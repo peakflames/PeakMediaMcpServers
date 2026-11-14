@@ -119,7 +119,7 @@ public sealed class DashboardHost : IAsyncDisposable
         for (var i = 0; i < count; i++)
         {
             await using var command = connection.CreateCommand();
-            command.CommandText = "INSERT INTO cache_evictions (cache_key, at_utc, size_bytes) VALUES ($key, $at, 1);";
+            command.CommandText = "INSERT INTO cache_evictions (cache_key, created_by_subject, at_utc, size_bytes) VALUES ($key, 'seed', $at, 1);";
             command.Parameters.AddWithValue("$key", $"evicted-{i}.wav");
             command.Parameters.AddWithValue("$at", Clock.GetUtcNow().ToUnixTimeMilliseconds());
             await command.ExecuteNonQueryAsync();

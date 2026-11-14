@@ -39,14 +39,14 @@ public sealed class CacheEvictor(
             await using var connection = opened.Value;
             var linksRemoved = await RemoveExpiredLinksAsync(connection, cancellationToken);
 
-            var rows = new List<(string Key, long Size)>();
+            var rows = new List<(string Key, long Size, string Owner)>();
             await using (var select = connection.CreateCommand())
             {
-                select.CommandText = "SELECT cache_key, size_bytes FROM audio_cache ORDER BY last_used_utc, created_utc, rowid;";
+                select.CommandText = "SELECT cache_key, size_bytes, created_by_subject FROM audio_cache ORDER BY last_used_utc, created_utc, rowid;";
                 await using var reader = await select.ExecuteReaderAsync(cancellationToken);
                 while (await reader.ReadAsync(cancellationToken))
                 {
-                    rows.Add((reader.GetString(0), reader.GetInt64(1)));
+                    rows.Add((reader.GetString(0), reader.GetInt64(1), reader.GetString(2)));
                 }
             }
 
@@ -54,7 +54,7 @@ public sealed class CacheEvictor(
             var limit = MaxBytes;
             var evicted = 0;
             long freed = 0;
-            foreach (var (key, size) in rows)
+            foreach (var (key, size, owner) in rows)
             {
                 if (total <= limit)
                 {
@@ -70,8 +70,9 @@ public sealed class CacheEvictor(
 
                 await using (var record = connection.CreateCommand())
                 {
-                    record.CommandText = "INSERT INTO cache_evictions (cache_key, at_utc, size_bytes) VALUES ($key, $at, $size);";
+                    record.CommandText = "INSERT INTO cache_evictions (cache_key, created_by_subject, at_utc, size_bytes) VALUES ($key, $owner, $at, $size);";
                     record.Parameters.AddWithValue("$key", key);
+                    record.Parameters.AddWithValue("$owner", owner);
                     record.Parameters.AddWithValue("$at", clock.GetUtcNow().ToUnixTimeMilliseconds());
                     record.Parameters.AddWithValue("$size", size);
                     await record.ExecuteNonQueryAsync(cancellationToken);
