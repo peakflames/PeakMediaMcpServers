@@ -1,6 +1,6 @@
 # PeakMedia MCP Servers — Design Decision Notes
 
-> **Status:** Decisions as built through the stdio-server-and-client-contract epic (YVOjXtI, v0.1.0).
+> **Status:** Decisions as built through the dashboard-shell-and-my-usage epic (Ail1fOL, v0.1.0).
 > Decisions from later epics are added by `/peak-workflow:refresh-docs` from their session handoffs.
 
 ---
@@ -268,7 +268,7 @@ When the cost cannot be read, the clip is charged at the model's configured pric
 
 **Rationale:** The speech response does not carry its price; the generation record does. Charging the
 configured price keeps a synthesis from failing over an unreadable cost and stops a caller's spend from
-being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §47).
+being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §53).
 
 ---
 
@@ -348,7 +348,7 @@ only at call start; a call that starts under quota runs to completion and notes 
 
 **Rationale:** A quota that only limited uncached calls would let a caller with a full cache keep spending through
 repeat calls, so the gate applies to every call. Checking at the start (not per clip) keeps a call whole once begun;
-the trade-off is bounded overspend under concurrency (§47).
+the trade-off is bounded overspend under concurrency (§53).
 
 ---
 
@@ -369,7 +369,7 @@ quota comparison in §34 is decided on exact values. Rounding happens only at th
 cost is charged that cost, and cache hits are charged nothing.
 
 **Rationale:** Charging $0 on a read failure let the spend under-count against the quota. The configured price is
-an estimate, so the fallback is visible in the log and is listed in §47 for calibration.
+an estimate, so the fallback is visible in the log and is listed in §53 for calibration.
 
 ---
 
@@ -391,7 +391,7 @@ audio. The clip is not charged.
 
 **Rationale:** The audio has already been synthesized and paid for upstream; failing the caller's call over a
 bookkeeping write would hide the audio without refunding the cost. The trade-off is an uncharged clip, recorded in
-§47 as a known gap.
+§53 as a known gap.
 
 ---
 
@@ -466,7 +466,7 @@ both messages, so the failure is handled the same way and only its advice differ
 `status <code>`.
 
 **Rationale:** One format for every host means a client parses one string. No requirement pinned the old wording, so the change
-was low-risk. Any client that parsed `status <code>` would need updating (see §47).
+was low-risk. Any client that parsed `status <code>` would need updating (see §53).
 
 ---
 
@@ -481,7 +481,76 @@ a copy of their schemas. The gateway test project hosts them because the `my_usa
 
 ---
 
-## 47. Known Issues and Deferred Work
+## 47. Theme Choice Is a Labelled Select, Not the Two-State Toggle
+
+**Decision:** The theme control is a labelled `BbNativeSelect` offering light, dark and system. It writes the
+library's own `bb-theme` storage entry, so `theme-init.js` applies the choice before first paint. "System"
+removes the entry and follows the OS preference.
+
+**Rationale:** The library's `BbDarkModeToggle` is two-state and cannot offer "System". Writing the library's
+own key keeps one source of truth for the theme script.
+
+---
+
+## 48. Dashboard Session Carries Identity Only; One Access Rule
+
+**Decision:** The dashboard's cookie principal carries only `sub`, `email` and `role`. Dashboard access is decided
+by `Caller.From` and `AccessRule`, the same as for the MCP tools. Pages require the named `dashboard` policy (cookie
+scheme). The default authenticate scheme `pm_selector` sends `/mcp` and bearer requests to JwtBearer and everything
+else to the cookie, so the cookie never authenticates `/mcp`.
+
+**Rationale:** Security Baseline — one access rule. Blazor components cannot name authentication schemes directly,
+so the policy carries the scheme name. The selector keeps a browser session from ever asserting a caller on `/mcp`.
+
+---
+
+## 49. OIDC Response Mode Is Query; Dashboard Cookies Use the Wall Clock
+
+**Decision:** The dashboard's OpenID Connect client uses `response_mode=query` (code + PKCE, callback `/signin-oidc`)
+instead of the handler's default `form_post`. Cookie and OIDC lifetimes use `TimeProvider.System`, whatever clock
+usage reporting uses.
+
+**Rationale:** A cross-site POST back from the provider would drop the SameSite=Lax correlation and nonce cookies;
+a redirect carrying the query keeps them. Session lifetimes are real time, while the usage clock is injected so
+tests can fix it.
+
+---
+
+## 50. My Usage Loads Only in the Interactive Render
+
+**Decision:** My Usage renders its loading state on the server render and loads its figures only in the interactive
+render.
+
+**Rationale:** The loading text appears at once, so a slow storage read still shows visible progress within one
+second (Progress feedback baseline), even when storage is slow.
+
+---
+
+## 51. Admin Addresses Answer 403 to Non-Administrators and 404 to Administrators
+
+**Decision:** Every `/admin` address renders Not Authorized (S-05). Non-administrators get HTTP 403 with a link back
+to My usage. Administrators get 404 until the admin pages arrive (Epic G8jMzOz). The decision is made server-side by
+`AccessRule.IsAdmin`, never by the front end.
+
+**Rationale:** A non-administrator gets an explicit answer and a way out rather than a bare 404. Administrators get
+no placeholder page for screens that do not exist yet.
+
+---
+
+## 52. Focus Check Scoped to Controls Outside the Header; End-to-End Tests Host the Gateway In-Process
+
+**Decision:** The focus-not-obscured requirement (TOR-09-qu5yesw, which replaces the earlier wording through
+CR-sziqlY7) applies to controls outside the app header. Header controls (Sign out, primary navigation, theme) need
+only lie within the viewport. End-to-end tests (`tests/PeakMediaRemoteMcpServer.E2E`) host the real gateway
+in-process (`Program.BuildApp`, real Kestrel, real SQLite) instead of launching the built binary.
+
+**Rationale:** A header's own controls cannot lie outside the header's box, so the original wording could not pass
+for them. In-process hosting gives a fixed usage clock and lets a test clear the storage fault switch while a page
+is open (TOR-08-rxZtbxT); a child process would need a request-reachable test hook to do that.
+
+---
+
+## 53. Known Issues and Deferred Work
 
 - **Quota is checked only at call start.** Concurrent calls can each start under quota, so overspend is bounded by
   concurrency × 40 clips (§34).
@@ -524,3 +593,12 @@ a copy of their schemas. The gateway test project hosts them because the `my_usa
 - **Stdio cost lookup routes `fake/tone` by generation ID.** `SoloSpeechClient.LookUpCostAsync` matches the literal ID
   `fake-tone`. This works; routing by model would be sturdier.
 - **Upstream failure wording changed on the gateway** (§45). Any client that parsed `status <code>` needs updating.
+- **Dashboard wireframe deviations.** S-01's over-quota notice lacks the "Over" badge; S-05 lacks the paragraph
+  pointing to the usage page for non-administrators; S-06's body text and the hint under "Sign in" differ from
+  `docs/product-vision-planning/ux/screens.md`.
+- **Dashboard sign-in callback is not yet confirmed on a real Okta tenant.** The Okta app needs `<gateway>/signin-oidc`
+  as a sign-in redirect URI next to `/oauth/callback`. Tests cover the flow with the stub issuer; the release check
+  covers Okta.
+- **Blazor Blueprint MCP server was unreachable in the implementing session.** Components were taken from the
+  library's llms.txt and checked against its XML docs, the fallback CLAUDE.md allows. Re-check each `Bb*` usage through
+  the `blazorblueprint` server once it connects.

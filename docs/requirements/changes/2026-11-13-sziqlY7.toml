@@ -1,0 +1,23 @@
+id = "CR-sziqlY7"
+date = 2026-11-13
+kind = "supersede"
+title = "Focus-not-obscured check applies to controls outside the app header"
+reason = """
+Implementation of epic Ail1fOL showed the old Then clause cannot be met: the app header's own controls (the "Sign out" button TOR-08-RiNk9re requires in the header, nav links, theme toggle) always lie inside the header's bounding box. The successor keeps the intent (focus never hidden behind the header) for controls outside it and requires header controls to stay within the viewport."""
+approved_via = "epic-branch"
+approved_by = "Todd Schavey"
+refs = ["epic Ail1fOL"]
+keywords = ["focus indicator", "app header", "focus not obscured", "sticky header"]
+
+[[changes]]
+tor = "TOR-09-fjQhX70"
+feature_file = "09-ux-baseline.feature.md"
+fingerprint = "a40b79457c57"
+successors = ["TOR-09-qu5yesw"]
+traced_to = ["CLAUDE.md UX Baseline: Keyboard & focus"]
+text = """
+Scenario: [TOR-09-fjQhX70] The dashboard shall display a visible focus indicator on the focused control that is not hidden behind the app header
+    Given "pat@example.com" is on My Usage (S-01) at a viewport height of 480 CSS px, scrolled to the bottom
+    When the person presses Shift+Tab until each control has held focus once
+    Then every focused control should have a computed outline or box-shadow that differs from its unfocused style
+    And every focused control's bounding box should lie within the viewport and outside the app header's bounding box"""

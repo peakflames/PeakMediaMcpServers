@@ -1,0 +1,109 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="app">
+    <header class="app-header" data-app-header>
+        <span class="brand">PeakMedia Gateway</span>
+        <nav class="app-nav" aria-label="Primary">
+            <a href="/" aria-current="@CurrentFor("")">My usage</a>
+            @if (_isAdmin)
+            {
+                <a href="/admin" aria-current="@CurrentFor("admin")">Usage</a>
+                <a href="/admin/cache" aria-current="@CurrentFor("admin/cache")">Cache</a>
+            }
+        </nav>
+        <div class="header-end">
+            <span class="who">@_email</span>
+            <div class="theme-choice">
+                <label for="theme-select">Theme</label>
+                <BbNativeSelect TValue="string" Id="theme-select" Size="NativeSelectSize.Small"
+                                Value="_theme" ValueChanged="OnThemeChanged">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="system">System</option>
+                </BbNativeSelect>
+            </div>
+            <form class="signout-form" method="post" action="/signout">
+                <AntiforgeryToken />
+                <BbButton Type="ButtonType.Submit" Variant="ButtonVariant.Outline" Size="ButtonSize.Small">Sign out</BbButton>
+            </form>
+        </div>
+    </header>
+
+    <main class="app-main" id="main">
+        @Body
+    </main>
+
+    <footer class="app-footer">@Program.Identity.Name v@(Program.Identity.Version)</footer>
+</div>
+
+<BbPortalHost />
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private string _email = string.Empty;
+    private bool _isAdmin;
+    private string _theme = "system";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        if (AuthenticationState is not null)
+        {
+            var user = (await AuthenticationState).User;
+            var caller = Caller.From(user);
+            _email = caller.IsSuccess ? caller.Value.Email : string.Empty;
+            _isAdmin = AccessRule.IsAdmin(user);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _theme = await JS.InvokeAsync<string>("peakTheme.get");
+                StateHasChanged();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The page closed before the theme could be read.
+            }
+        }
+    }
+
+    private async Task OnThemeChanged(string? value)
+    {
+        _theme = value is "light" or "dark" ? value : "system";
+        try
+        {
+            await JS.InvokeVoidAsync("peakTheme.set", _theme);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page closed; nothing to apply.
+        }
+    }
+
+    /// <summary>"page" when the current address is <paramref name="relative"/> (marks the current nav item).</summary>
+    private string? CurrentFor(string relative)
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].TrimEnd('/');
+        return string.Equals(path, relative, StringComparison.OrdinalIgnoreCase) ? "page" : null;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

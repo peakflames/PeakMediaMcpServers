@@ -5,7 +5,7 @@ namespace PeakMediaRemoteMcpServer.Usage;
 /// token (<see cref="Caller.From"/>), never from anything a request can assert, so a tool only ever
 /// reads and charges the caller's own records.
 /// </summary>
-public sealed class UsageLedger(UsageStore usage, QuotaStore quotas, IHttpContextAccessor httpContext, TimeProvider clock) : IUsageLedger
+public sealed class UsageLedger(UsageStore usage, UsageStatusReader reader, IHttpContextAccessor httpContext, TimeProvider clock) : IUsageLedger
 {
     public async Task<Result<UsageStatus>> GetStatusAsync(CancellationToken cancellationToken)
     {
@@ -15,28 +15,7 @@ public sealed class UsageLedger(UsageStore usage, QuotaStore quotas, IHttpContex
             return Result.Fail<UsageStatus>(caller.Errors);
         }
 
-        var month = UsageMonth.Current(clock);
-        var totals = await usage.GetTotalsAsync(caller.Value, caller.Value.Subject, month, cancellationToken);
-        if (totals.IsFailed)
-        {
-            return Result.Fail<UsageStatus>(totals.Errors);
-        }
-
-        var quota = await quotas.GetQuotaAsync(caller.Value, caller.Value.Subject, cancellationToken);
-        if (quota.IsFailed)
-        {
-            return Result.Fail<UsageStatus>(quota.Errors);
-        }
-
-        var spent = totals.Value.Spent;
-        return Result.Ok(new UsageStatus(
-            month.Label,
-            spent,
-            quota.Value,
-            Math.Max(0m, quota.Value - spent),
-            totals.Value.ClipsSynthesized,
-            totals.Value.CacheHits,
-            month.ResetsUtc));
+        return await reader.ReadAsync(caller.Value, UsageMonth.Current(clock), cancellationToken);
     }
 
     public async Task<Result> RecordAsync(UsageEntry entry, CancellationToken cancellationToken)

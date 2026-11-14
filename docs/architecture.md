@@ -1,8 +1,9 @@
 # PeakMedia MCP Servers — Architecture Document
 
-> **Status:** Describes the as-built system through the stdio-server-and-client-contract epic (YVOjXtI, v0.1.0):
-> the gateway's per-user usage log, monthly quotas and `my_usage` tool (EYGrros); the stdio server's local clip
-> cache and shared narration tools (YVOjXtI). The usage dashboard is not yet built.
+> **Status:** Describes the as-built system through the dashboard-shell-and-my-usage epic (Ail1fOL, v0.1.0):
+> the usage dashboard shell, sign-in and My Usage screen (Ail1fOL); the gateway's per-user usage log, monthly
+> quotas and `my_usage` tool (EYGrros); the stdio server's local clip cache and shared narration tools (YVOjXtI).
+> The Usage, User detail and Cache admin screens are not yet built.
 > Sections for capabilities not yet built say so explicitly. Run `/peak-workflow:refresh-docs`
 > after completing epics to keep this document aligned with the code.
 
@@ -31,7 +32,9 @@ console variant serves single users with their own OpenRouter key.
 | Database | SQLite (`Microsoft.Data.Sqlite`) | Usage log, quotas, audio cache (gateway only) |
 | Errors | FluentResults | Result pattern |
 | Logging | Serilog | Plain text to daily file + stderr |
-| Tests | xUnit, ASP.NET TestHost | Fake OpenRouter + stub OIDC issuer (`StubOidcIssuer`) |
+| Dashboard UI | Blazor Interactive Server, Blazor Blueprint UI 4.2 (`BlazorBlueprint.Components`, `BlazorBlueprint.Icons.Lucide`) | Usage dashboard inside the HTTP gateway (§6) |
+| Dashboard session | Cookie `pm_dashboard` + OpenID Connect (`Microsoft.AspNetCore.Authentication.OpenIdConnect`) | Browser sign-in through the same provider as the broker; never authenticates `/mcp` |
+| Tests | xUnit, ASP.NET TestHost; Microsoft.Playwright 1.64.1 (E2E) | Fake OpenRouter + stub OIDC issuer (`StubOidcIssuer`); Chromium end-to-end tests |
 | Container | .NET SDK container publish | Docker Hub image on `v*` tags |
 
 ---
@@ -61,6 +64,10 @@ console variant serves single users with their own OpenRouter key.
 | `GET /authorize` | none | Unknown client / unregistered redirect → bare 400 JSON. Missing `response_type=code` or S256 `code_challenge` → redirect to the client with `error`. Otherwise stores a transaction, sets the `pm_consent` cookie, 302 to the OIDC provider with `redirect_uri=G/oauth/callback`, scopes, `state`=transaction ID, nonce, the gateway's own S256 challenge |
 | `GET /oauth/callback` | none (consent cookie) | Unknown state → 400; cookie mismatch → 403; provider `error` → redirect to the client with that error, nothing stored; success → ID token validated, `users` upserted, one-time code → redirect `?code&state&iss` |
 | `POST /token` | client auth | `authorization_code` (PKCE S256 verified, single-use code) and `refresh_token` (rotated). Response `access_token` (RS256 JWT, 60 min), `token_type`, `expires_in`, `refresh_token`. Failures: 400 `invalid_grant` / `invalid_request`, 401 `invalid_client` |
+| `GET /signin-oidc` | none (OIDC state and nonce cookies) | Dashboard sign-in callback, handled by the OpenID Connect scheme `pm_dashboard_oidc` (code + PKCE, `response_mode=query`). On success sets the `pm_dashboard` session cookie and continues to the dashboard. Must be registered in the Okta app's sign-in redirect URIs |
+| `POST /signout` | antiforgery token | Clears only the browser dashboard session (the cookie); does not sign the person out of the provider. Redirects to Signed Out (`/signed-out`). Invalid antiforgery → 400 problem-details |
+
+Dashboard pages are Blazor routes, not API endpoints (§6): `/` (My Usage, S-01), `/admin` and `/admin/{*Path}` (Not Authorized, S-05), `/signed-out` (Signed Out, S-06).
 
 Every `/mcp` request goes through the resource-server gate (`RequireAuthorization`): JwtBearer
 validates the gateway's own access token (issuer = `Broker:IssuerUri`, audience = `McpAuth:Resource`,
@@ -101,15 +108,20 @@ src/PeakMediaMcpTools/             shared library: MCP tools (TtsTools, TtsTools
   OpenRouter/                      ISpeechClient (speech seam), OpenRouterSpeechClient: POST audio/speech (PCM, ZDR) and GET generation?id= for cost; ToneSpeechClient (offline fake/tone); SpeechError (failure kinds), SpeechRetryPolicy
 src/PeakMediaMcpServer/            stdio console server (user's own OpenRouter key, local clip cache, no database): Program, OpenRouterKey, LocalClipStore, SoloSpeechClient (routes fake/tone offline), UnmeteredUsageLedger, SoloOpenRouterOptions, CommandLine
 src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configuration/, Storage/, Auth/, Broker/, Cache/
-  Auth/                            McpAuthSetup (JwtBearer + MCP challenge scheme, admin policy), Caller, AccessRule
+  Auth/                            McpAuthSetup (JwtBearer + MCP challenge scheme, admin and dashboard policies), DashboardAuthSetup (cookie + OIDC dashboard session), AdminGroup (groups → admin rule, shared with the broker), Caller, AccessRule
   Cache/                           ClipStore (shared audio cache index + WAV files), AudioDirectory, DownloadTokens, ClipEndpoints (GET /clips/{token}), CacheEvictor (LRU eviction + expired-link clean-up), CacheEvictionService (hosted, periodic)
   Broker/                          the gateway's authorization server: SigningKeyProvider, JwtIssuer, PkceHelper,
                                    RedirectUriValidator, UpstreamOidcClient, BrokerJanitor
   Broker/Endpoints/                metadata, JWKS, register, authorize, callback, token, consent cookie
   Broker/Storage/                  AppMetaStore, UserStore, ClientStore, TransactionStore, CodeStore, RefreshTokenStore, TokenHashing
-  Usage/                           UsageStore (usage log reads/writes), QuotaStore (default quota + admin overrides), UsageLedger (binds stores to the caller from the token), UsageMonth (UTC calendar-month window, NanoUsd money type)
+  Usage/                           UsageStore (usage log reads/writes), QuotaStore (default quota + admin overrides), UsageLedger (binds stores to the caller from the token), UsageMonth (UTC calendar-month window, NanoUsd money type), UsageStatusReader (month-parameterized reader shared by `my_usage` and My Usage), DashboardUsageService (dashboard facade over the reader)
+  Components/                      Blazor root (`App.razor`, `Routes.razor`, `_Imports.razor`, `RedirectToSignIn.razor`), `Layout/` (MainLayout app shell, AuthLayout brand-only), `Pages/` (MyUsage, NotAuthorized, SignedOut)
+  Dashboard/                       DashboardEndpoints (`POST /signout`)
+  wwwroot/                         theme.css (design tokens), app.css (app layout), js/theme-choice.js (light / dark / system)
 tests/PeakMediaMcpServer.Tests/    stdio tests (process-level; SoloNarration/ drives the built binary over stdin/stdout via tests/TestSupport/StdioClient.cs)
-tests/PeakMediaRemoteMcpServer.Tests/  gateway tests (in-process + process-level)
+tests/PeakMediaRemoteMcpServer.Tests/  gateway tests (in-process + process-level); Dashboard/ (usage service, admin role mapping, shell served)
+tests/PeakMediaRemoteMcpServer.E2E/  Playwright (Chromium) end-to-end tests: hosts the real gateway (`Program.BuildApp`, real Kestrel, real SQLite) in-process and signs in through the stub issuer's redirect flow
+tests/StubSignIn/                  PeakMediaStubSignIn — console helper for `build.py smoke` (stub issuer + broker sign-in over a line protocol)
 tests/TestSupport/                 ServerProcess harness, RepoPaths, FreePort, TempDirectory, LogPatterns, ListLogger
 tests/Fakes/                       FakeOpenRouter (canned PCM at POST /api/v1/audio/speech, cost via generation lookup)
 tests/PeakMediaRemoteMcpServer.Tests/Narration/  one test file per narration TOR group; NarrationClient signs in through the real broker
@@ -168,7 +180,7 @@ table references; `oauth_clients`; `oauth_transactions` (incl. the gateway's ups
 nonce, consent-cookie hash); `oauth_codes(code_hash, subject → users, …)`; `oauth_refresh_tokens(token_hash,
 subject → users, client_id, expires_utc)`. Times are Unix seconds; codes, refresh tokens, client secrets
 and the consent cookie are stored only as SHA-256 hashes; no upstream (Okta) token is stored. A migration failure logs an error and startup
-continues (Known Issue in design-notes §47). Every table that holds a caller's records carries the
+continues (Known Issue in design-notes §53). Every table that holds a caller's records carries the
 caller's Okta subject. `StorageFaultSwitch` (`PEAKMEDIA_TEST_STORAGE_FAULT=fail|delay:<ms>`) makes
 storage fail or slow down for tests and screen-state checks; it is ignored, with a Warning, in Production.
 
@@ -203,7 +215,32 @@ Neither server writes to stdout except the stdio server's MCP protocol and `--ve
 
 ## 6. Frontend Architecture
 
-N/A — no user interface
+The usage dashboard lives inside `PeakMediaRemoteMcpServer` (Epic Ail1fOL): Blazor, **Interactive
+Server**, built with Blazor Blueprint UI (`BlazorBlueprint.Components` 4.2, `BlazorBlueprint.Icons.Lucide`).
+
+- **Composition.** `Components/App.razor` loads `wwwroot/theme.css` (design tokens) →
+  `_content/BlazorBlueprint.Components/blazorblueprint.css` → `wwwroot/app.css` (app layout), with
+  `theme-init.js` in `<head>` (dark class before first paint). `Routes` runs Interactive Server
+  everywhere except pages marked `[ExcludeFromInteractiveRouting]` (Signed Out, static SSR).
+  `Components/Layout/MainLayout.razor` is the app shell: brand, primary nav (`aria-current` on the
+  current item; "Usage" / "Cache" only when `AccessRule.IsAdmin`), signed-in email, Theme select
+  (light / dark / system, `wwwroot/js/theme-choice.js`, stored in the library's `bb-theme` key), Sign
+  out (antiforgery form POST), `<main>`, version footer, `<BbPortalHost />`. `AuthLayout` is brand-only.
+- **Tokens.** `wwwroot/theme.css` holds shadcn-compatible neutral `:root` / `.dark` variables, one
+  `--radius`, and the semantic `--over-quota` pair. Never edit the library's CSS.
+- **Screens.** `Pages/MyUsage.razor` (S-01, `/`), `Pages/NotAuthorized.razor` (S-05, every `/admin`
+  address — HTTP 403 for non-admins, 404 for admins until Epic G8jMzOz), `Pages/SignedOut.razor`
+  (S-06, `/signed-out`). My Usage renders loading on the server render and loads in the interactive
+  render (so the loading text appears at once); states loading / cancelled / error / empty /
+  populated; a Cancel button appears after 10 s and cancels the in-flight query.
+- **Data.** `Usage/DashboardUsageService` → `Usage/UsageStatusReader` (shared with the `my_usage`
+  tool through `UsageLedger`) → `UsageStore` / `QuotaStore` → `AccessRule`. The caller comes only
+  from the session principal.
+- **Decisions.** Design rationale for the dashboard is in design-notes §47–§52.
+- **Tests.** `tests/PeakMediaRemoteMcpServer.E2E` hosts the real gateway (`Program.BuildApp`) on real
+  Kestrel in-process with a fixed usage clock, signs in through the stub issuer's real redirect flow,
+  and drives Chromium with Microsoft.Playwright (installed on first run). The test fault switch is
+  replaced in-process (`SqliteConnectionFactory.FaultSwitch`, internal) to clear a fault mid-test.
 
 ---
 
@@ -228,6 +265,8 @@ N/A — no user interface
   gateway refuses to start without them), `Broker__UpstreamAuthority`, `Broker__UpstreamClientId`,
   `Broker__IssuerUri` (the public URL), `McpAuth__Resource` (= IssuerUri + `/mcp`), `Admin__Group`,
   `Storage__AudioDirectory` (optional; defaults to `audio/` beside the database).
+- Okta app redirect URIs: the sign-in redirect list needs both `<gateway>/oauth/callback` (broker) and
+  `<gateway>/signin-oidc` (dashboard). The second is a release check, not yet confirmed on a real Okta tenant.
 - Downloads are served from the gateway itself; `Broker__IssuerUri` must be the public URL that clients can reach, since download links are built from it.
 
 ---
@@ -256,6 +295,18 @@ N/A — no user interface
   decided at sign-in and stored on `users`. `Caller.From(principal)` builds the caller from the token;
   `AccessRule.CanAccess(caller, ownerSubject)` (owner or admin) and `AccessRule.RequireAdmin` are the one
   place every later tool and page decides access; the `admin` authorization policy uses the same rule.
+- **Dashboard session.** Cookie scheme `pm_dashboard` (HttpOnly, SameSite=Lax, Secure on HTTPS, 8 h
+  sliding, wall clock) started by the OpenID Connect scheme `pm_dashboard_oidc` against the same
+  `Broker:Upstream*` client (code + PKCE, `response_mode=query`, callback `/signin-oidc` — register it in
+  the Okta app's sign-in redirect URIs next to `/oauth/callback`; `client_secret_post`; nothing saved).
+  The session principal carries only `sub`, `email`, `role` (role from `AdminGroup.Grants`, the same rule
+  the broker uses) and the sign-in is recorded in `users`. Pages require the `dashboard` policy (cookie
+  scheme); no session → 302 to the provider. The default authenticate scheme `pm_selector` sends `/mcp`
+  and any `Authorization: Bearer` request to JwtBearer and everything else to the cookie, so the cookie
+  can never authenticate `/mcp`. `POST /signout` (antiforgery) clears only the browser session.
+- **Test fault switch.** `PEAKMEDIA_TEST_STORAGE_FAULT` (`fail` | `delay:<ms>`, ignored in Production) is
+  read once at startup; the delay honors cancellation. In-process end-to-end tests replace it through the
+  internal `SqliteConnectionFactory.FaultSwitch` — no request can reach it.
 - **Quotas.** Every usage and quota read or write goes through `UsageStore`/`QuotaStore` with the caller
   from the validated token (`UsageLedger`), so the owner-or-admin rule of `AccessRule` applies. Only
   administrators may set quota overrides. Usage and quota records never carry narration text.

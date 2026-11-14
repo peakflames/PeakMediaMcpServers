@@ -12,6 +12,9 @@ public static class McpAuthSetup
 {
     public const string AdminPolicy = "admin";
 
+    /// <summary>Dashboard pages: a signed-in dashboard session (cookie); no session → OIDC sign-in.</summary>
+    public const string DashboardPolicy = "dashboard";
+
     public const string ProtectedResourceMetadataPath = "/.well-known/oauth-protected-resource";
 
     public static IServiceCollection AddCallerAuthentication(this IServiceCollection services)
@@ -22,16 +25,21 @@ public static class McpAuthSetup
         services
             .AddAuthentication(options =>
             {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                // JwtBearer for /mcp and bearer requests; the dashboard cookie for the dashboard's pages.
+                options.DefaultAuthenticateScheme = DashboardAuthSetup.SelectorScheme;
                 options.DefaultChallengeScheme = McpAuthenticationDefaults.AuthenticationScheme;
             })
             .AddJwtBearer()
-            .AddMcp(_ => { });
+            .AddMcp(_ => { })
+            .AddDashboardAuthentication();
 
         services.AddAuthorizationBuilder()
             .AddPolicy(AdminPolicy, policy => policy
                 .RequireAuthenticatedUser()
-                .RequireAssertion(context => AccessRule.IsAdmin(context.User)));
+                .RequireAssertion(context => AccessRule.IsAdmin(context.User)))
+            .AddPolicy(DashboardPolicy, policy => policy
+                .AddAuthenticationSchemes(DashboardAuthSetup.CookieScheme)
+                .RequireAuthenticatedUser());
         return services;
     }
 }

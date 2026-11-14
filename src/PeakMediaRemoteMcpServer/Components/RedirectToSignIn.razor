@@ -1,0 +1,14 @@
+@inject NavigationManager Navigation
+
+@* A session that ended while the page was open: reload from the server, which starts the sign-in. *@
+<p role="status">Signing you in…</p>
+
+@code {
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+    }
+}

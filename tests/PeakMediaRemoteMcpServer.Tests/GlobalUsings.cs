@@ -1,6 +1,7 @@
 global using System.Globalization;
 global using System.Net;
 global using System.Net.Http.Headers;
+global using System.Security.Claims;
 global using System.Security.Cryptography;
 global using System.Text;
 global using System.Text.Json;
@@ -22,6 +23,7 @@ global using PeakMediaRemoteMcpServer.Cache;
 global using PeakMediaRemoteMcpServer.Configuration;
 global using PeakMediaRemoteMcpServer.Storage;
 global using PeakMediaRemoteMcpServer.Tests.Narration;
+global using PeakMediaRemoteMcpServer.Tests.Usage;
 global using PeakMediaRemoteMcpServer.Usage;
 global using PeakMediaStubAuthorizationServer;
 global using PeakMediaTestFakes;

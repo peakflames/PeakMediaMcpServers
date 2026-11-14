@@ -16,10 +16,14 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="PeakMediaRemoteMcpServer.Tests" />
+    <InternalsVisibleTo Include="PeakMediaRemoteMcpServer.E2E" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="BlazorBlueprint.Components" Version="4.2.0" />
+    <PackageReference Include="BlazorBlueprint.Icons.Lucide" Version="2.0.2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="11.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="11.0.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />

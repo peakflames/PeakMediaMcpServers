@@ -72,7 +72,7 @@ public static class CallbackEndpoint
 
         var person = identity.Value;
         var adminGroup = adminOptions.Value.Group;
-        var isAdmin = !string.IsNullOrWhiteSpace(adminGroup) && person.Groups.Contains(adminGroup, StringComparer.Ordinal);
+        var isAdmin = AdminGroup.Grants(person.Groups, adminGroup);
         var now = DateTimeOffset.UtcNow;
 
         var recorded = await users.UpsertSignInAsync(person.Subject, person.Email, isAdmin, now, cancellationToken);

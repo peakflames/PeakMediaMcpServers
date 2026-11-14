@@ -4,7 +4,6 @@ namespace PeakMediaRemoteMcpServer.Storage;
 public sealed class SqliteConnectionFactory
 {
     private readonly string _connectionString;
-    private readonly StorageFaultSwitch _faultSwitch;
 
     public SqliteConnectionFactory(string databasePath, StorageFaultSwitch faultSwitch)
     {
@@ -15,19 +14,27 @@ public sealed class SqliteConnectionFactory
             Mode = SqliteOpenMode.ReadWriteCreate,
             Cache = SqliteCacheMode.Shared,
         }.ToString();
-        _faultSwitch = faultSwitch;
+        FaultSwitch = faultSwitch;
     }
 
     public string DatabasePath { get; }
 
+    /// <summary>
+    /// The test fault switch. Set once from the environment at startup; in-process end-to-end tests
+    /// replace it (internal, never reachable from a request) to clear a fault while the page is open.
+    /// </summary>
+    internal StorageFaultSwitch FaultSwitch { get; set; }
+
     public async Task<Result<SqliteConnection>> OpenAsync(CancellationToken cancellationToken = default)
     {
-        if (_faultSwitch.Delay > TimeSpan.Zero)
+        var faultSwitch = FaultSwitch;
+        if (faultSwitch.Delay > TimeSpan.Zero)
         {
-            await Task.Delay(_faultSwitch.Delay, cancellationToken);
+            // Honors cancellation, so a dashboard load the person cancels stops waiting at once.
+            await Task.Delay(faultSwitch.Delay, cancellationToken);
         }
 
-        if (_faultSwitch.Fail)
+        if (faultSwitch.Fail)
         {
             return Result.Fail<SqliteConnection>("storage is unavailable (test fault switch)");
         }
