@@ -1,0 +1,47 @@
+@* The admin pages' gate. Administrators see the page's content; everyone else gets Not Authorized (S-05)
+   with HTTP 403 and the content is never rendered. Decided by AccessRule from the signed-in session only.
+   The data services behind the admin pages enforce the same rule again. *@
+
+@if (_decided && _isAdmin)
+{
+    @ChildContent
+}
+else if (_decided)
+{
+    <PageTitle>Not authorized — PeakMedia Gateway</PageTitle>
+    <section class="notice-page" data-not-authorized>
+        <h1>Not authorized</h1>
+        <p>This page is for gateway administrators.</p>
+        <BbLink Href="/">Go to My usage</BbLink>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private bool _decided;
+    private bool _isAdmin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationState is not null)
+        {
+            _isAdmin = AccessRule.IsAdmin((await AuthenticationState).User);
+        }
+
+        _decided = true;
+
+        // Only the first (server) render has the HTTP response; the interactive render keeps the page.
+        if (!_isAdmin && HttpContext is not null && !HttpContext.Response.HasStarted)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+        }
+    }
+}

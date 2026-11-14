@@ -10,6 +10,9 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Dashboard **Usage** screen (`/admin`, administrators only): every user's month — spent, quota, characters, clips, cache-hit rate, an `OVER` badge where spend has reached the quota, and a Total row; sorted by spend, highest first.
+- Dashboard **Cache** screen (`/admin/cache`, administrators only): cache size against `Storage:CacheMaxGb`, clip count, this month's hit rate and evictions, with Refresh. Evictions are now recorded (schema migration 4, `cache_evictions`), counted from this version onward.
+- Narrow screens (below 480 px): the header's links, signed-in email, theme choice and Sign out move into a menu sheet behind an "Open menu" button.
 ### Changed
 - `build.py smoke` runs the Run-the-tool gate unattended: it starts its own gateway against the test sign-in server, signs in through the gateway's real flow (no browser, no bypass), lists the tools and stops everything. The real Okta sign-in (`build.py mcp tools --oauth`) moves to a by-hand release check.
 ### Fixed

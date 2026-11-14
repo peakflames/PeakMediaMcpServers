@@ -1,0 +1,146 @@
+@page "/admin/cache"
+@attribute [Authorize(Policy = McpAuthSetup.DashboardPolicy)]
+@implements IDisposable
+@inject CacheStatsReader Stats
+@inject ILogger<AdminCache> Logger
+
+@* S-04 Cache (wireframe docs/product-vision-planning/ux/wireframes/S-04-cache.html): whether the shared
+   audio cache is earning its keep. Administrators only (AdminOnly + CacheStatsReader). *@
+
+<AdminOnly>
+    <PageTitle>Cache — PeakMedia Gateway</PageTitle>
+
+    <div class="page-header">
+        <h1>Cache</h1>
+        <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync" data-refresh>Refresh</BbButton>
+        @if (_load.State == LoadState.Loaded && _load.Value is { } shown)
+        {
+            <p class="page-meta" data-subtitle>@Subtitle(shown)</p>
+        }
+    </div>
+
+    @switch (_load.State)
+    {
+        case LoadState.Loading:
+            <div class="state-panel" data-state="loading">
+                <div class="loading-row">
+                    <p role="status">Loading cache statistics…</p>
+                    @if (_load.ShowCancel)
+                    {
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="_load.Cancel">Cancel</BbButton>
+                    }
+                </div>
+            </div>
+            break;
+
+        case LoadState.Cancelled:
+            <div class="state-panel" data-state="cancelled">
+                <p role="status">Loading was cancelled.</p>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync">Retry</BbButton>
+            </div>
+            break;
+
+        case LoadState.Error:
+            <BbAlert Variant="AlertVariant.Danger" data-state="error">
+                <BbAlertDescription>Couldn't load cache statistics. Check your connection and try again.</BbAlertDescription>
+            </BbAlert>
+            <div class="loading-row" style="margin-top: 0.75rem;">
+                <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync">Retry</BbButton>
+            </div>
+            break;
+
+        case LoadState.Loaded:
+            var stats = _load.Value!;
+            @if (stats.Clips == 0)
+            {
+                <div class="state-panel" data-state="empty" style="margin-bottom: 1rem;">
+                    <p class="state-title">The cache is empty</p>
+                    <p class="muted">Clips appear here after the first narration request.</p>
+                </div>
+            }
+            <div class="stats" data-state="@(stats.Clips == 0 ? "empty-figures" : "populated")" data-stat-cards>
+                @foreach (var (label, value) in Cards(stats))
+                {
+                    <BbCard Class="@(label == "Size" ? "stat stat-lead" : "stat")" data-stat="@label">
+                        <BbCardContent Class="stat-body">
+                            <p class="stat-label">@label</p>
+                            <p class="stat-value">@value</p>
+                        </BbCardContent>
+                    </BbCard>
+                }
+            </div>
+            <p class="footnote">GB here means 2<sup>30</sup> bytes. Hit rate: clips served from the cache out of all clips requested this month, by every user. Evictions are counted from this version onward.</p>
+            break;
+    }
+</AdminOnly>
+
+@code {
+    private const double BytesPerGb = 1024d * 1024 * 1024;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private PageLoad<CacheStats> _load = null!;
+
+    protected override void OnInitialized()
+    {
+        _load = new PageLoad<CacheStats>(
+            change => InvokeAsync(async () =>
+            {
+                await change();
+                StateHasChanged();
+            }),
+            Logger,
+            "Cache statistics");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Only the interactive render loads: the first (server) render shows the loading state at once.
+        if (firstRender)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var user = AuthenticationState is null ? new ClaimsPrincipal() : (await AuthenticationState).User;
+        await _load.RunAsync(token => Stats.GetAsync(user, token));
+    }
+
+    private static string Gb(long bytes)
+    {
+        return (bytes / BytesPerGb).ToString("0.#", CultureInfo.InvariantCulture) + " GB";
+    }
+
+    private static string Count(long value)
+    {
+        return value.ToString("N0", CultureInfo.InvariantCulture);
+    }
+
+    private static string Subtitle(CacheStats stats)
+    {
+        if (stats.Clips == 0)
+        {
+            return $"{Gb(stats.SizeBytes)} of {Gb(stats.CapBytes)} used";
+        }
+
+        var used = stats.CapBytes == 0 ? 0 : AdminUsageService.Percent(stats.SizeBytes, stats.CapBytes);
+        return $"{Gb(stats.SizeBytes)} of {Gb(stats.CapBytes)} used ({used}%) · least-recently-used clips are removed first when full";
+    }
+
+    private static IEnumerable<(string Label, string Value)> Cards(CacheStats stats)
+    {
+        yield return ("Size", Gb(stats.SizeBytes));
+        yield return ("Size cap", Gb(stats.CapBytes));
+        yield return ("Clips", Count(stats.Clips));
+        yield return ("Hit rate this month", $"{stats.HitRatePercent}%");
+        yield return ("Evicted this month", Count(stats.EvictedThisMonth));
+    }
+
+    public void Dispose()
+    {
+        _load.Dispose();
+    }
+}

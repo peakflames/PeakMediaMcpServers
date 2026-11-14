@@ -99,6 +99,34 @@ public class CacheEvictionTests
         Assert.Equal(HttpStatusCode.NotFound, download.StatusCode);
     }
 
+    // TOR-08-VHkMu93 (data source of "Evicted this month"): each clip the eviction pass removes is
+    // recorded as one cache_evictions row with its key and size.
+    [Fact]
+    public async Task TOR_08_VHkMu93_each_evicted_clip_is_recorded_in_cache_evictions()
+    {
+        await using var client = await StartWithRoomForThreeClipsAsync();
+        var a = await SynthesizeOneAsync(client, "A");
+        var b = await SynthesizeOneAsync(client, "B");
+        await SynthesizeOneAsync(client, "C");
+        await SynthesizeOneAsync(client, "D");
+        await SynthesizeOneAsync(client, "E");
+        var keyA = a.GetProperty("cacheKey").GetString()!;
+        var keyB = b.GetProperty("cacheKey").GetString()!;
+        var ownerA = await OwnerOfAsync(client, "audio_cache", keyA);
+        var ownerB = await OwnerOfAsync(client, "audio_cache", keyB);
+        Assert.False(string.IsNullOrEmpty(ownerA));
+
+        await RunEvictorAsync(client);
+
+        // Each eviction row carries the subject who created the evicted clip (access rule: owner column).
+        Assert.Equal(ownerA, await OwnerOfAsync(client, "cache_evictions", keyA));
+        Assert.Equal(ownerB, await OwnerOfAsync(client, "cache_evictions", keyB));
+        Assert.Equal(2, await client.Host.CountRowsAsync("cache_evictions"));
+        Assert.Equal(1, await CountAsync(client, "SELECT COUNT(*) FROM cache_evictions WHERE cache_key = $key;", a.GetProperty("cacheKey").GetString()));
+        Assert.Equal(1, await CountAsync(client, "SELECT COUNT(*) FROM cache_evictions WHERE cache_key = $key;", b.GetProperty("cacheKey").GetString()));
+        Assert.Equal(ClipBytes * 2, await CountAsync(client, "SELECT SUM(size_bytes) FROM cache_evictions;", null));
+    }
+
     // Download links expired more than 24 h ago are removed; a link expired only minutes ago still answers 410.
     [Fact]
     public async Task Expired_download_links_are_kept_24_hours_then_removed()
@@ -121,6 +149,16 @@ public class CacheEvictionTests
     private static async Task<long> SizeOfAsync(NarrationClient client, string cacheKey)
     {
         return await CountAsync(client, "SELECT size_bytes FROM audio_cache WHERE cache_key = $key;", cacheKey);
+    }
+
+    private static async Task<string?> OwnerOfAsync(NarrationClient client, string table, string cacheKey)
+    {
+        var opened = await client.Host.Services.GetRequiredService<SqliteConnectionFactory>().OpenAsync();
+        await using var connection = opened.Value;
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT created_by_subject FROM {table} WHERE cache_key = $key;";
+        command.Parameters.AddWithValue("$key", cacheKey);
+        return (string?)await command.ExecuteScalarAsync();
     }
 
     private static async Task<long> CountAsync(NarrationClient client, string sql, string? cacheKey)

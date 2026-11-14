@@ -35,7 +35,7 @@ public sealed class DashboardHost : IAsyncDisposable
 
     public IServiceProvider Services => _app.Services;
 
-    public static async Task<DashboardHost> StartAsync(DateTimeOffset? now = null)
+    public static async Task<DashboardHost> StartAsync(DateTimeOffset? now = null, IDictionary<string, string?>? overrides = null)
     {
         var stub = await StubOidcIssuer.StartAsync();
         var data = new TempDirectory();
@@ -57,6 +57,11 @@ public sealed class DashboardHost : IAsyncDisposable
             ["OpenRouter:ApiKey"] = "test-key",
             ["Storage:DatabasePath"] = data.File("peakmedia.db"),
         });
+        if (overrides is not null)
+        {
+            builder.Configuration.AddInMemoryCollection(overrides);
+        }
+
         builder.Services.AddSingleton<TimeProvider>(clock);
         var app = Program.BuildApp(builder);
         await app.StartAsync();
@@ -77,10 +82,59 @@ public sealed class DashboardHost : IAsyncDisposable
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "My usage", Level = 1 })).ToBeVisibleAsync();
     }
 
-    /// <summary>Waits until the interactive circuit is up (the theme choice is read over it).</summary>
+    /// <summary>Signs in "ada@example.com", a member of the Admin:Group, and lands on My Usage.</summary>
+    public Task SignInAsAdminAsync(IPage page)
+    {
+        return SignInAsync(page, StubUser.For("ada@example.com", AdminGroup));
+    }
+
+    /// <summary>
+    /// Puts <paramref name="clips"/> clips totalling <paramref name="totalBytes"/> into the shared cache's
+    /// index (rows in the host's real temp database; no WAV files — the Cache screen reads the index).
+    /// </summary>
+    public async Task SeedCacheAsync(int clips, long totalBytes)
+    {
+        var opened = await Services.GetRequiredService<SqliteConnectionFactory>().OpenAsync();
+        await using var connection = opened.Value;
+        await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection.BeginTransactionAsync();
+        var each = clips == 0 ? 0 : totalBytes / clips;
+        for (var i = 0; i < clips; i++)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "INSERT INTO audio_cache (cache_key, size_bytes, duration_ms, created_by_subject, created_utc, last_used_utc) VALUES ($key, $size, 1000, 'seed', 0, 0);";
+            command.Parameters.AddWithValue("$key", $"seed-cache-{Guid.NewGuid():N}.wav");
+            command.Parameters.AddWithValue("$size", i == clips - 1 ? totalBytes - (each * (clips - 1)) : each);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+    }
+
+    /// <summary>Records <paramref name="count"/> evicted clips at the host's clock.</summary>
+    public async Task SeedEvictionsAsync(int count)
+    {
+        var opened = await Services.GetRequiredService<SqliteConnectionFactory>().OpenAsync();
+        await using var connection = opened.Value;
+        for (var i = 0; i < count; i++)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO cache_evictions (cache_key, created_by_subject, at_utc, size_bytes) VALUES ($key, 'seed', $at, 1);";
+            command.Parameters.AddWithValue("$key", $"evicted-{i}.wav");
+            command.Parameters.AddWithValue("$at", Clock.GetUtcNow().ToUnixTimeMilliseconds());
+            await command.ExecuteNonQueryAsync();
+        }
+    }
+
+    /// <summary>
+    /// Waits until the interactive circuit is up and its event handlers are attached. The server prerender
+    /// already shows the page's loading state, so that alone proves nothing; every dashboard page loads its
+    /// data only over the live circuit, so a page whose load has finished is interactive.
+    /// </summary>
     public static async Task WaitInteractiveAsync(IPage page)
     {
-        await page.WaitForFunctionAsync("() => window.Blazor !== undefined && document.querySelector('[data-state]') !== null");
+        await page.WaitForFunctionAsync(
+            "() => window.Blazor !== undefined && document.querySelector('main [data-state]') !== null && document.querySelector(\"main [data-state='loading']\") === null");
     }
 
     /// <summary>

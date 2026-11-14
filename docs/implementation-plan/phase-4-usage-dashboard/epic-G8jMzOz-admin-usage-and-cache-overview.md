@@ -1,7 +1,7 @@
 # Epic G8jMzOz: Admin usage and cache overview
 
 **Phase:** 4 — Usage dashboard
-**Status:** Not Started
+**Status:** Complete — 2026-11-14
 **Dependencies:** Epic Ail1fOL (Dashboard shell and My Usage — dashboard shell, sign-in and roles)
 **Planned by:** Todd Schavey
 **Planned:** 2026-11-12

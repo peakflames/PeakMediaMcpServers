@@ -172,6 +172,8 @@ public partial class Program
         services.AddSingleton<QuotaStore>();
         services.AddSingleton<UsageStatusReader>();
         services.AddSingleton<DashboardUsageService>();
+        services.AddSingleton<AdminUsageService>();
+        services.AddSingleton<CacheStatsReader>();
         services.AddSingleton<IUsageLedger, UsageLedger>();
         services.AddTransient<ISpeechClient>(sp => sp.GetRequiredService<OpenRouterSpeechClient>());
         services.AddTransient<NarrationService>();
