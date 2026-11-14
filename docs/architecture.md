@@ -1,10 +1,10 @@
 # PeakMedia MCP Servers — Architecture Document
 
-> **Status:** Describes the as-built system through the admin-usage-and-cache-overview epic (G8jMzOz, v0.1.0):
-> the admin Usage and Cache screens and their admin gate (G8jMzOz); the usage dashboard shell, sign-in and My Usage
-> screen (Ail1fOL); the gateway's per-user usage log, monthly quotas and `my_usage` tool (EYGrros); the stdio
-> server's local clip cache and shared narration tools (YVOjXtI). The User detail admin screen is not yet built.
-> Sections for capabilities not yet built say so explicitly. Run `/peak-workflow:refresh-docs`
+> **Status:** Describes the as-built system through the user-detail-and-quota-editing epic (EwgA3Zf, v0.1.0):
+> the admin User Detail screen with quota override and reset (EwgA3Zf); the admin Usage and Cache screens and
+> their admin gate (G8jMzOz); the usage dashboard shell, sign-in and My Usage screen (Ail1fOL); the gateway's
+> per-user usage log, monthly quotas and `my_usage` tool (EYGrros); the stdio server's local clip cache and shared
+> narration tools (YVOjXtI). Sections for capabilities not yet built say so explicitly. Run `/peak-workflow:refresh-docs`
 > after completing epics to keep this document aligned with the code.
 
 ---
@@ -67,7 +67,7 @@ console variant serves single users with their own OpenRouter key.
 | `GET /signin-oidc` | none (OIDC state and nonce cookies) | Dashboard sign-in callback, handled by the OpenID Connect scheme `pm_dashboard_oidc` (code + PKCE, `response_mode=query`). On success sets the `pm_dashboard` session cookie and continues to the dashboard. Must be registered in the Okta app's sign-in redirect URIs |
 | `POST /signout` | antiforgery token | Clears only the browser dashboard session (the cookie); does not sign the person out of the provider. Redirects to Signed Out (`/signed-out`). Invalid antiforgery → 400 problem-details |
 
-Dashboard pages are Blazor routes, not API endpoints (§6): `/` (My Usage, S-01), `/admin` (Usage, S-02, administrators only), `/admin/cache` (Cache, S-04, administrators only), `/admin/{*Path}` (Not Authorized, S-05: 403 for non-administrators, 404 for administrators on any other `/admin` address), `/signed-out` (Signed Out, S-06).
+Dashboard pages are Blazor routes, not API endpoints (§6): `/` (My Usage, S-01), `/admin` (Usage, S-02, administrators only), `/admin/users/{Id}` (User Detail, S-03, administrators only; `Id` is the person's email, `?month=` selects the UTC month), `/admin/cache` (Cache, S-04, administrators only), `/admin/{*Path}` (Not Authorized, S-05: 403 for non-administrators, 404 for administrators on any other `/admin` address), `/signed-out` (Signed Out, S-06).
 
 Every `/mcp` request goes through the resource-server gate (`RequireAuthorization`): JwtBearer
 validates the gateway's own access token (issuer = `Broker:IssuerUri`, audience = `McpAuth:Resource`,
@@ -114,10 +114,10 @@ src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configura
                                    RedirectUriValidator, UpstreamOidcClient, BrokerJanitor
   Broker/Endpoints/                metadata, JWKS, register, authorize, callback, token, consent cookie
   Broker/Storage/                  AppMetaStore, UserStore, ClientStore, TransactionStore, CodeStore, RefreshTokenStore, TokenHashing
-  Usage/                           UsageStore (usage log reads/writes; admin-gated `ListMonthAsync`), QuotaStore (default quota + admin overrides), UsageLedger (binds stores to the caller from the token), UsageMonth (UTC calendar-month window, NanoUsd money type), UsageStatusReader (month-parameterized reader shared by `my_usage` and My Usage), DashboardUsageService (dashboard facade over the reader), AdminUsageService (admin Usage report: sort, OVER, totals, hit rates)
-  Components/                      Blazor root (`App.razor`, `Routes.razor`, `_Imports.razor`, `RedirectToSignIn.razor`), `AdminOnly.razor` (admin gate for the admin pages), `PageLoad.cs` (shared load state: loading → loaded / error / cancelled, Cancel after 10 s), `Layout/` (MainLayout app shell, AuthLayout brand-only), `Pages/` (MyUsage, AdminUsage, AdminCache, NotAuthorized, SignedOut)
+  Usage/                           UsageStore (usage log reads/writes; admin-gated `ListMonthAsync` and per-user `ListUserMonthAsync`), QuotaStore (default quota, admin overrides; `GetQuotaInfoAsync`, admin-gated `ClearOverrideAsync`), UsageLedger (binds stores to the caller from the token), UsageMonth (UTC calendar-month window, NanoUsd money type), UsageStatusReader (month-parameterized reader shared by `my_usage` and My Usage), DashboardUsageService (dashboard facade over the reader), AdminUsageService (admin Usage report: sort, OVER, totals, hit rates), UserDetailService (admin User Detail: report, save and reset quota, amount parsing, display name)
+  Components/                      Blazor root (`App.razor`, `Routes.razor`, `_Imports.razor`, `RedirectToSignIn.razor`), `AdminOnly.razor` (admin gate for the admin pages), `PageLoad.cs` (shared load state: loading → loaded / error / cancelled, Cancel after 10 s), `Layout/` (MainLayout app shell, AuthLayout brand-only), `Pages/` (MyUsage, AdminUsage, AdminUserDetail, AdminCache, NotAuthorized, SignedOut)
   Dashboard/                       DashboardEndpoints (`POST /signout`)
-  wwwroot/                         theme.css (design tokens), app.css (app layout), js/theme-choice.js (light / dark / system)
+  wwwroot/                         theme.css (design tokens), app.css (app layout), js/theme-choice.js (light / dark / system), js/menu-focus.js (focus return for the menu sheet and dialogs; `peakFocus.restore`, `peakForm.value`)
 tests/PeakMediaMcpServer.Tests/    stdio tests (process-level; SoloNarration/ drives the built binary over stdin/stdout via tests/TestSupport/StdioClient.cs)
 tests/PeakMediaRemoteMcpServer.Tests/  gateway tests (in-process + process-level); Dashboard/ (usage service, admin role mapping, shell served)
 tests/PeakMediaRemoteMcpServer.E2E/  Playwright (Chromium) end-to-end tests: hosts the real gateway (`Program.BuildApp`, real Kestrel, real SQLite) in-process and signs in through the stub issuer's redirect flow
@@ -183,7 +183,7 @@ table references; `oauth_clients`; `oauth_transactions` (incl. the gateway's ups
 nonce, consent-cookie hash); `oauth_codes(code_hash, subject → users, …)`; `oauth_refresh_tokens(token_hash,
 subject → users, client_id, expires_utc)`. Times are Unix seconds; codes, refresh tokens, client secrets
 and the consent cookie are stored only as SHA-256 hashes; no upstream (Okta) token is stored. A migration failure logs an error and startup
-continues (Known Issue in design-notes §59). Every table that holds a caller's records carries the
+continues (Known Issue in design-notes §66). Every table that holds a caller's records carries the
 caller's Okta subject. `StorageFaultSwitch` (`PEAKMEDIA_TEST_STORAGE_FAULT=fail|delay:<ms>`) makes
 storage fail or slow down for tests and screen-state checks; it is ignored, with a Warning, in Production.
 
@@ -232,21 +232,28 @@ Server**, built with Blazor Blueprint UI (`BlazorBlueprint.Components` 4.2, `Bla
 - **Tokens.** `wwwroot/theme.css` holds shadcn-compatible neutral `:root` / `.dark` variables, one
   `--radius`, and the semantic `--over-quota` pair. Never edit the library's CSS.
 - **Screens.** `Pages/MyUsage.razor` (S-01, `/`), `Pages/AdminUsage.razor` (S-02, `/admin`, administrators
-  only), `Pages/AdminCache.razor` (S-04, `/admin/cache`, administrators only), `Pages/NotAuthorized.razor`
+  only), `Pages/AdminUserDetail.razor` (S-03, `/admin/users/{Id}`, administrators only: month summary, one row
+  per clip without narration text, the monthly quota, a labelled quota form with inline validation, and a
+  "Use default…" confirmation dialog), `Pages/AdminCache.razor` (S-04, `/admin/cache`, administrators only), `Pages/NotAuthorized.razor`
   (S-05, every other `/admin` address — HTTP 403 for non-administrators, 404 for administrators),
   `Pages/SignedOut.razor` (S-06, `/signed-out`). My Usage renders loading on the server render and loads in
   the interactive render (so the loading text appears at once); states loading / cancelled / error / empty /
   populated; a Cancel button appears after 10 s and cancels the in-flight query. Admin pages and My Usage
   share `PageLoad<T>` for these states. Each admin page is wrapped in `AdminOnly`, which decides with
   `AccessRule.IsAdmin` and never renders its content for other callers.
-- **Navigation.** `MainLayout` shows "Usage" and "Cache" only to administrators. Below 480 CSS px the
+- **Navigation.** `MainLayout` shows "Usage" and "Cache" only to administrators; while a person's User Detail
+  page is shown, "Usage" carries `aria-current="true"`, since the detail page sits under Usage. Below 480 CSS px the
   navigation, signed-in email, theme choice and Sign out move into a menu sheet (`BbSheet`).
 - **Data.** `Usage/DashboardUsageService` → `Usage/UsageStatusReader` (shared with the `my_usage`
   tool through `UsageLedger`) → `UsageStore` / `QuotaStore` → `AccessRule`. The caller comes only
   from the session principal. Admin Usage reads `AdminUsageService` → `UsageStore.ListMonthAsync` and
   `QuotaStore`; admin Cache reads `CacheStatsReader` (size against `Storage:CacheMaxGb`, clip count, this
   month's hit rate, `cache_evictions` this month). Both enforce `AccessRule.RequireAdmin` in the data service.
-- **Decisions.** Design rationale for the dashboard is in design-notes §47–§58.
+  User Detail reads and writes through `UserDetailService` → `UsageStore.ListUserMonthAsync` (one person's clips
+  in a month) and `QuotaStore.GetQuotaInfoAsync` / `SetOverrideAsync` / `ClearOverrideAsync`; the service and
+  each store re-check the administrator role. The route's email is resolved to the person's subject; the
+  service fails rather than guessing when two `users` rows share an email. No schema change in this epic (schema v4).
+- **Decisions.** Design rationale for the dashboard is in design-notes §47–§65.
 - **Tests.** `tests/PeakMediaRemoteMcpServer.E2E` hosts the real gateway (`Program.BuildApp`) on real
   Kestrel in-process with a fixed usage clock, signs in through the stub issuer's real redirect flow,
   and drives Chromium with Microsoft.Playwright (installed on first run). The test fault switch is
@@ -314,9 +321,12 @@ Server**, built with Blazor Blueprint UI (`BlazorBlueprint.Components` 4.2, `Bla
   scheme); no session → 302 to the provider. The default authenticate scheme `pm_selector` sends `/mcp`
   and any `Authorization: Bearer` request to JwtBearer and everything else to the cookie, so the cookie
   can never authenticate `/mcp`. `POST /signout` (antiforgery) clears only the browser session.
-- **Admin pages.** `/admin` (Usage) and `/admin/cache` (Cache) are gated twice on the server: `AdminOnly` on each
+- **Admin pages.** `/admin` (Usage), `/admin/users/{Id}` (User Detail) and `/admin/cache` (Cache) are gated twice on the server: `AdminOnly` on each
   page decides with `AccessRule.IsAdmin`, and the admin data reads (`UsageStore.ListMonthAsync`,
-  `CacheStatsReader`) call `AccessRule.RequireAdmin` themselves. Non-administrators get 403 and no admin data.
+  `UsageStore.ListUserMonthAsync`, `CacheStatsReader`) call `AccessRule.RequireAdmin` themselves. Non-administrators get 403 and no admin data.
+- **Quota editing.** Only administrators may set or clear a quota override (`QuotaStore.SetOverrideAsync`,
+  `ClearOverrideAsync`, both `RequireAdmin`). Clearing an override deletes its row; the log line for that does not
+  name the administrator (see design-notes §66).
 - **Test fault switch.** `PEAKMEDIA_TEST_STORAGE_FAULT` (`fail` | `delay:<ms>`, ignored in Production) is
   read once at startup; the delay honors cancellation. In-process end-to-end tests replace it through the
   internal `SqliteConnectionFactory.FaultSwitch` — no request can reach it.
