@@ -527,6 +527,45 @@ input:focus-visible,
     }
 }
 
+/* User Detail's requests table needs about 650 CSS px for its six columns: below 720 px (a 1280 px window
+   at 200 % zoom included) each clip becomes labelled lines, so no column is clipped. */
+@media (max-width: 719.98px) {
+    .table-wrap:has(.clips-table) {
+        border: 0;
+        border-radius: 0;
+    }
+
+    .clips-table,
+    .clips-table tbody,
+    .clips-table tr,
+    .clips-table td {
+        display: block;
+    }
+
+    .clips-table thead {
+        display: none;
+    }
+
+    .clips-table tr {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .clips-table td,
+    .clips-table td.num {
+        padding: 0.125rem 0;
+        border: 0;
+        text-align: left;
+    }
+
+    .clips-table td[data-th]::before {
+        content: attr(data-th) ": ";
+        color: var(--muted-foreground);
+        font-size: 0.8125rem;
+        font-weight: 400;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

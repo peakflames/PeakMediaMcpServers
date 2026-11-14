@@ -674,7 +674,21 @@ public sealed class UserDetailTests(BrowserFixture browser)
         await OpenAsync(host, page, signIn: false);
         await Assertions.Expect(Requests(page)).ToBeVisibleAsync();
         AssertLayout(await page.EvaluateAsync<Layout>(LayoutScript), "User detail", checkOverlap: false);
+        Assert.Equal(string.Empty, await page.EvaluateAsync<string>(ClippedCellsScript));
     }
+
+    // Table cells cut off by a box that hides its overflow, or lying outside the viewport ("" when none).
+    private const string ClippedCellsScript = """
+        () => {
+            const clipped = [...document.querySelectorAll('main *')]
+                .filter(e => !e.closest('.sr-only') && getComputedStyle(e).overflowX === 'hidden' && e.scrollWidth > e.clientWidth + 1)
+                .map(e => 'box ' + e.className + ' ' + e.scrollWidth + '>' + e.clientWidth);
+            const outside = [...document.querySelectorAll('main td, main th')]
+                .filter(c => c.getClientRects().length > 0 && c.getBoundingClientRect().right > window.innerWidth + 0.5)
+                .map(c => 'cell ' + c.textContent.trim());
+            return [...clipped, ...outside].join(' | ');
+        }
+        """;
 
     // Border colour of a control against the background behind it, and its focus ring against that background (sRGB via a canvas).
     private const string BorderContrastScript = """
