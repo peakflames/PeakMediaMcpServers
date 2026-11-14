@@ -1,3 +1,13 @@
 {
-  "setup": "python3 -m venv .venv && .venv/bin/pip install --quiet psutil fastmcp && dotnet restore PeakMediaMcpServers.sln"
+  "setup": "python3 -m venv .venv && .venv/bin/pip install --quiet psutil fastmcp && dotnet restore PeakMediaMcpServers.sln",
+  "readOnly": [
+    "/Users/schaveyt/.nuget/packages"
+  ],
+  "network": [
+    "api.nuget.org"
+  ],
+  "copy": [
+    ".env"
+  ],
+  "look": "after"
 }
