@@ -1,0 +1,438 @@
+@page "/admin/users/{Id}"
+@attribute [Authorize(Policy = McpAuthSetup.DashboardPolicy)]
+@implements IDisposable
+@inject UserDetailService Detail
+@inject IJSRuntime JS
+@inject ILogger<AdminUserDetail> Logger
+
+@* S-03 User Detail (wireframe docs/product-vision-planning/ux/wireframes/S-03-user-detail.html): one user's
+   month, one row per clip (never the narration text), and their monthly quota. Administrators only
+   (AdminOnly + UserDetailService, whose stores enforce AccessRule again). *@
+
+<AdminOnly>
+    <PageTitle>@Heading · PeakMedia Gateway</PageTitle>
+
+    <BbBreadcrumb Class="detail-breadcrumb">
+        <BbBreadcrumbList>
+            <BbBreadcrumbItem>
+                <BbBreadcrumbLink href="/admin">Usage</BbBreadcrumbLink>
+            </BbBreadcrumbItem>
+            <BbBreadcrumbSeparator />
+            <BbBreadcrumbItem>
+                <BbBreadcrumbPage>@Heading</BbBreadcrumbPage>
+            </BbBreadcrumbItem>
+        </BbBreadcrumbList>
+    </BbBreadcrumb>
+
+    <div class="page-header">
+        <h1 class="detail-heading">@Heading</h1>
+        <div class="month-field">
+            <label for="month-select">Month</label>
+            <BbNativeSelect TValue="string" Id="month-select" Value="_month" ValueChanged="OnMonthChanged">
+                @foreach (var label in _months)
+                {
+                    <option value="@label">@label</option>
+                }
+            </BbNativeSelect>
+        </div>
+        @if (_load.State == LoadState.Loaded && _load.Value is { } shown)
+        {
+            <p class="page-meta" data-subtitle>
+                @shown.Month · @UsageText.Dollars(shown.Spent) of @UsageText.Dollars(shown.Quota)
+                @if (shown.IsOver)
+                {
+                    <BbBadge Class="badge-over">OVER</BbBadge>
+                }
+                · @Count(shown.Clips) @(shown.Clips == 1 ? "clip" : "clips") · @(shown.CacheHitPercent)% cache hits
+            </p>
+        }
+    </div>
+
+    @switch (_load.State)
+    {
+        case LoadState.Loading:
+            <div class="state-panel" data-state="loading">
+                <div class="loading-row">
+                    <p role="status">Loading usage for @Heading…</p>
+                    @if (_load.ShowCancel)
+                    {
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="_load.Cancel">Cancel</BbButton>
+                    }
+                </div>
+            </div>
+            break;
+
+        case LoadState.Cancelled:
+            <div class="state-panel" data-state="cancelled">
+                <p role="status">Loading was cancelled.</p>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync">Retry</BbButton>
+            </div>
+            break;
+
+        case LoadState.Error:
+            <BbAlert Variant="AlertVariant.Danger" data-state="error">
+                <BbAlertDescription>Couldn't load usage for @Heading. Check your connection and try again.</BbAlertDescription>
+            </BbAlert>
+            <div class="loading-row" style="margin-top: 0.75rem;">
+                <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync">Retry</BbButton>
+            </div>
+            break;
+
+        case LoadState.Loaded:
+            var report = _load.Value!;
+            <section class="quota-panel" aria-labelledby="quota-heading" data-quota-form>
+                <h2 id="quota-heading" class="section-title">Monthly quota</h2>
+                <p class="muted quota-current" data-current-quota>
+                    Current quota: @UsageText.Dollars(report.Quota)/month (@(report.QuotaIsDefault ? "the default" : "set by an administrator"))
+                </p>
+                <form class="quota-form" @onsubmit="SaveAsync" @onsubmit:preventDefault novalidate>
+                    <div class="quota-field">
+                        <label for="quota-input">Monthly quota (USD)</label>
+                        <BbInput @ref="_quotaInput" Id="quota-input" Type="InputType.Text" inputmode="decimal" autocomplete="off"
+                                 Value="@_amount" ValueChanged="OnAmountChanged" UpdateTiming="UpdateTiming.OnChange"
+                                 AriaInvalid="@(_fieldError is not null)" AriaDescribedBy="@(_fieldError is not null ? "quota-error" : "quota-hint")" />
+                        @if (_fieldError is not null)
+                        {
+                            <p id="quota-error" class="field-error">@_fieldError</p>
+                        }
+                        else
+                        {
+                            <p id="quota-hint" class="muted field-hint">US dollars per calendar month, for example 60.</p>
+                        }
+                    </div>
+                    <div class="quota-actions">
+                        <BbButton Type="ButtonType.Submit" Disabled="_saving" data-save>Save</BbButton>
+                        <BbAlertDialog Open="_confirmOpen" OpenChanged="OnConfirmOpenChanged">
+                            <BbAlertDialogTrigger AsChild="true">
+                                <BbButton Variant="ButtonVariant.Outline" id="use-default-button">Use default…</BbButton>
+                            </BbAlertDialogTrigger>
+                            <BbAlertDialogContent Class="confirm-dialog" @onkeydown="OnDialogKeyDown">
+                                <BbAlertDialogHeader>
+                                    <BbAlertDialogTitle>Reset @report.Email to the default quota?</BbAlertDialogTitle>
+                                    <BbAlertDialogDescription>
+                                        @if (report.QuotaIsDefault)
+                                        {
+                                            @($"Their quota is already the default of {UsageText.Dollars(report.DefaultQuota)}/month; nothing changes.")
+                                        }
+                                        else
+                                        {
+                                            @($"Their quota of {UsageText.Dollars(report.Quota)}/month is removed and the default of {UsageText.Dollars(report.DefaultQuota)}/month applies from their next call.")
+                                        }
+                                    </BbAlertDialogDescription>
+                                </BbAlertDialogHeader>
+                                <BbAlertDialogFooter>
+                                    <BbAlertDialogCancel AsChild="true">
+                                        <BbButton Variant="ButtonVariant.Outline" data-cancel>Cancel</BbButton>
+                                    </BbAlertDialogCancel>
+                                    <BbAlertDialogAction AsChild="true">
+                                        <BbButton OnClick="ConfirmResetAsync">Use default</BbButton>
+                                    </BbAlertDialogAction>
+                                </BbAlertDialogFooter>
+                            </BbAlertDialogContent>
+                        </BbAlertDialog>
+                    </div>
+                </form>
+                @if (_saving)
+                {
+                    <p role="status" class="quota-message" data-saving>Saving…</p>
+                }
+                else if (_message is not null && _messageIsError)
+                {
+                    <p role="alert" class="quota-message field-error" data-quota-message>@_message</p>
+                }
+                else if (_message is not null)
+                {
+                    <p role="status" class="quota-message" data-quota-message>@_message</p>
+                }
+            </section>
+
+            @if (report.Rows.Count == 0)
+            {
+                <div class="state-panel" data-state="empty">
+                    <p class="state-title">No usage for @report.Email in @report.Month</p>
+                    <p class="muted">This user requested no narration in this month. You can still change their quota above.</p>
+                    <BbLink Href="/admin">Back to Usage</BbLink>
+                </div>
+            }
+            else
+            {
+                <div class="table-wrap" data-state="populated">
+                    <table class="usage-table clips-table" data-requests-table>
+                        <caption class="sr-only">Requests by @report.Email in @report.Month, newest first</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Time (UTC)</th>
+                                <th scope="col">Model</th>
+                                <th scope="col">Voice</th>
+                                <th scope="col" class="num">Characters</th>
+                                <th scope="col" class="num">Cost</th>
+                                <th scope="col">Source</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in report.Rows)
+                            {
+                                <tr>
+                                    <td data-th="Time (UTC)" class="time">@row.AtUtc.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                                    <td data-th="Model" class="model">@row.Model</td>
+                                    <td data-th="Voice">@row.Voice</td>
+                                    <td data-th="Characters" class="num">@Count(row.Characters)</td>
+                                    <td data-th="Cost" class="num" data-cost>@Cost(row)</td>
+                                    <td data-th="Source" data-source>@(row.CacheHit ? "cached" : "synthesized")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="footnote">One row per clip requested, newest first. Cached clips are served from the shared cache at no cost. Narration text is never stored.</p>
+            }
+            break;
+    }
+</AdminOnly>
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    [SupplyParameterFromQuery(Name = "month")]
+    public string? MonthQuery { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private IReadOnlyList<string> _months = [];
+    private string _month = string.Empty;
+    private PageLoad<UserDetailReport> _load = null!;
+    private BbInput? _quotaInput;
+    private string _amount = string.Empty;
+    private string? _fieldError;
+    private string? _message;
+    private bool _messageIsError;
+    private bool _saving;
+    private bool _confirmOpen;
+    private bool _focusQuotaInput;
+    private string? _knownEmail;
+
+    /// <summary>The user's email once loaded; until then the subject from the address.</summary>
+    private string Heading => _load.Value?.Email ?? _knownEmail ?? Id;
+
+    protected override void OnInitialized()
+    {
+        _months = Detail.MonthLabels();
+        _month = MonthQuery is not null && _months.Contains(MonthQuery, StringComparer.Ordinal) ? MonthQuery : Detail.CurrentMonthLabel;
+        _load = new PageLoad<UserDetailReport>(
+            change => InvokeAsync(async () =>
+            {
+                await change();
+                StateHasChanged();
+            }),
+            Logger,
+            "User detail");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Only the interactive render loads: the first (server) render shows the loading state at once.
+        if (firstRender)
+        {
+            await LoadAsync();
+        }
+
+        if (_focusQuotaInput && _quotaInput?.Element is { } input)
+        {
+            _focusQuotaInput = false;
+            await input.FocusAsync();
+        }
+    }
+
+    private async Task<ClaimsPrincipal> UserAsync()
+    {
+        return AuthenticationState is null ? new ClaimsPrincipal() : (await AuthenticationState).User;
+    }
+
+    private async Task LoadAsync()
+    {
+        var user = await UserAsync();
+        var month = _month;
+        _fieldError = null;
+        _message = null;
+        // The amount is set before the loaded state renders, so the form never shows without it (a later
+        // render would overwrite what the person has started typing).
+        await _load.RunAsync(async token =>
+        {
+            var read = await Detail.GetAsync(user, Id, month, token);
+            if (read.IsSuccess && month == _month)
+            {
+                _knownEmail = read.Value.Email;
+                _amount = Amount(read.Value.Quota);
+            }
+
+            return read;
+        });
+    }
+
+    private async Task OnMonthChanged(string? value)
+    {
+        _month = value ?? Detail.CurrentMonthLabel;
+        await LoadAsync();
+    }
+
+    private void OnAmountChanged(string? value)
+    {
+        _amount = value ?? string.Empty;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving || _load.Value is not { } report)
+        {
+            return;
+        }
+
+        // The field's value as it is on screen now: the input's own change notification can reach the
+        // server after the submit, so the amount is read from the page at the moment Save is pressed.
+        if (_quotaInput?.Element is { } field)
+        {
+            try
+            {
+                _amount = await JS.InvokeAsync<string>("peakForm.value", field);
+            }
+            catch (JSDisconnectedException)
+            {
+                return;
+            }
+        }
+
+        var parsed = UserDetailService.ParseAmount(_amount);
+        if (parsed.IsFailed)
+        {
+            _fieldError = parsed.Errors[0].Message;
+            _message = null;
+            _focusQuotaInput = true;
+            return;
+        }
+
+        _fieldError = null;
+        _message = null;
+        _saving = true;
+        StateHasChanged();
+        QuotaChange change;
+        var user = await UserAsync();
+        try
+        {
+            change = await Detail.SaveQuotaAsync(user, report.Subject, report.Email, _amount, CancellationToken.None);
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        await ShowChangeAsync(change, user, parsed.Value, isDefault: false);
+    }
+
+    private void OnConfirmOpenChanged(bool open)
+    {
+        _confirmOpen = open;
+        if (!open)
+        {
+            _ = RestoreFocusAsync();
+        }
+    }
+
+    /// <summary>Escape cancels the confirmation (the safe option), as Cancel does.</summary>
+    private void OnDialogKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && _confirmOpen)
+        {
+            OnConfirmOpenChanged(false);
+        }
+    }
+
+    private async Task ConfirmResetAsync()
+    {
+        if (_load.Value is not { } report)
+        {
+            return;
+        }
+
+        _confirmOpen = false;
+        _fieldError = null;
+        _message = null;
+        _saving = true;
+        StateHasChanged();
+        _ = RestoreFocusAsync();
+        QuotaChange change;
+        var user = await UserAsync();
+        try
+        {
+            change = await Detail.ResetQuotaAsync(user, report.Subject, CancellationToken.None);
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        await ShowChangeAsync(change, user, Detail.DefaultMonthlyUsd, isDefault: true);
+    }
+
+    /// <summary>Shows the change's message; after a stored change, shows the new quota at once and re-reads the month quietly.</summary>
+    private async Task ShowChangeAsync(QuotaChange change, ClaimsPrincipal user, decimal storedQuota, bool isDefault)
+    {
+        _messageIsError = change.Outcome != QuotaChangeOutcome.Saved;
+        _message = change.Message;
+        if (change.Outcome != QuotaChangeOutcome.Saved)
+        {
+            return;
+        }
+
+        // The stored quota is known from the change itself, so the page never shows the old one (even if the re-read fails).
+        if (_load.Value is { } shown)
+        {
+            _load.Refresh(shown with { Quota = storedQuota, QuotaIsDefault = isDefault, IsOver = shown.Spent >= storedQuota });
+            _amount = Amount(storedQuota);
+        }
+
+        // The confirmation shows at once; the quiet re-read follows.
+        StateHasChanged();
+
+        var reread = await Detail.GetAsync(user, Id, _month, CancellationToken.None);
+        if (reread.IsSuccess)
+        {
+            _load.Refresh(reread.Value);
+            _amount = Amount(reread.Value.Quota);
+        }
+    }
+
+    /// <summary>Returns focus to "Use default…" once the dialog has closed (the dialog's invoking control).</summary>
+    private async Task RestoreFocusAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("peakFocus.restore", "#use-default-button");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page closed; nothing to focus.
+        }
+    }
+
+    private static string Amount(decimal usd)
+    {
+        return usd.ToString("0.00", CultureInfo.InvariantCulture);
+    }
+
+    private static string Cost(UsageClipRow row)
+    {
+        return row.CacheHit ? "$0.00" : string.Create(CultureInfo.InvariantCulture, $"${row.Cost:0.0000}");
+    }
+
+    private static string Count(long value)
+    {
+        return value.ToString("N0", CultureInfo.InvariantCulture);
+    }
+
+    public void Dispose()
+    {
+        _load.Dispose();
+    }
+}

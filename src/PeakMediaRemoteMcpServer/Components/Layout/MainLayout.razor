@@ -130,11 +130,19 @@
         }
     }
 
-    /// <summary>"page" when the current address is <paramref name="relative"/> (marks the current nav item).</summary>
+    /// <summary>
+    /// "page" when the current address is <paramref name="relative"/> (marks the current nav item); "true" on the
+    /// Usage item while a user's detail page (admin/users/…), which sits under Usage, is shown.
+    /// </summary>
     private string? CurrentFor(string relative)
     {
         var path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].TrimEnd('/');
-        return string.Equals(path, relative, StringComparison.OrdinalIgnoreCase) ? "page" : null;
+        if (string.Equals(path, relative, StringComparison.OrdinalIgnoreCase))
+        {
+            return "page";
+        }
+
+        return relative == "admin" && path.StartsWith("admin/users/", StringComparison.OrdinalIgnoreCase) ? "true" : null;
     }
 
     /// <summary>When the person closes the sheet (Escape, overlay, close button), focus returns to the menu button.</summary>

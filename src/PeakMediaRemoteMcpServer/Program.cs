@@ -173,6 +173,7 @@ public partial class Program
         services.AddSingleton<UsageStatusReader>();
         services.AddSingleton<DashboardUsageService>();
         services.AddSingleton<AdminUsageService>();
+        services.AddSingleton<UserDetailService>();
         services.AddSingleton<CacheStatsReader>();
         services.AddSingleton<IUsageLedger, UsageLedger>();
         services.AddTransient<ISpeechClient>(sp => sp.GetRequiredService<OpenRouterSpeechClient>());

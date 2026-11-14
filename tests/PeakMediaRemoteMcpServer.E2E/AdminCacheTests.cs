@@ -41,7 +41,7 @@ public sealed class AdminCacheTests(BrowserFixture browser)
         }
 
         await Assertions.Expect(page.Locator("main [data-subtitle]")).ToHaveTextAsync("12.4 GB of 20 GB used (62%) · least-recently-used clips are removed first when full");
-        Assert.Equal("Cache — PeakMedia Gateway", await page.TitleAsync());
+        Assert.Equal("Cache · PeakMedia Gateway", await page.TitleAsync());
         await page.Context.CloseAsync();
     }
 
