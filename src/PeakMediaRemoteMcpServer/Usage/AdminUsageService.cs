@@ -1,7 +1,7 @@
 namespace PeakMediaRemoteMcpServer.Usage;
 
 /// <summary>One row of the admin Usage table.</summary>
-public sealed record AdminUsageRow(string Email, decimal Spent, decimal Quota, long Characters, int Clips, int CacheHitRatePercent, bool IsOver);
+public sealed record AdminUsageRow(string Subject, string Email, decimal Spent, decimal Quota, long Characters, int Clips, int CacheHitRatePercent, bool IsOver);
 
 /// <summary>The Usage table's "Total" footer.</summary>
 public sealed record AdminUsageTotal(decimal Spent, long Characters, int Clips, int CacheHitRatePercent, int OverCount);
@@ -46,7 +46,7 @@ public sealed class AdminUsageService(UsageStore usage, QuotaStore quotas, Dashb
         var rows = listed.Value
             .OrderByDescending(u => u.Spent)
             .ThenBy(u => u.Email, StringComparer.OrdinalIgnoreCase)
-            .Select(u => new AdminUsageRow(u.Email, u.Spent, u.Quota, u.Characters, u.Clips, Percent(u.CacheHits, u.Clips), u.Spent >= u.Quota))
+            .Select(u => new AdminUsageRow(u.Subject, u.Email, u.Spent, u.Quota, u.Characters, u.Clips, Percent(u.CacheHits, u.Clips), u.Spent >= u.Quota))
             .ToList();
         var clips = listed.Value.Sum(u => u.Clips);
         var total = new AdminUsageTotal(

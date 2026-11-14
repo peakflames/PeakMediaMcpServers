@@ -80,6 +80,15 @@ public sealed class PageLoad<T>(Func<Func<Task>, Task> render, Microsoft.Extensi
         await render(() => Task.CompletedTask);
     }
 
+    /// <summary>Replaces a loaded value in place (a quiet re-read after a change), without passing through Loading.</summary>
+    public void Refresh(T value)
+    {
+        if (State == LoadState.Loaded && _load is null)
+        {
+            Value = value;
+        }
+    }
+
     public void Cancel()
     {
         _load?.Cancel();

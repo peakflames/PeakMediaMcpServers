@@ -1,6 +1,6 @@
 # PeakMedia MCP Servers — Design Decision Notes
 
-> **Status:** Decisions as built through the admin-usage-and-cache-overview epic (G8jMzOz, v0.1.0).
+> **Status:** Decisions as built through the user-detail-and-quota-editing epic (EwgA3Zf, v0.1.0).
 > Decisions from later epics are added by `/peak-workflow:refresh-docs` from their session handoffs.
 
 ---
@@ -268,7 +268,7 @@ When the cost cannot be read, the clip is charged at the model's configured pric
 
 **Rationale:** The speech response does not carry its price; the generation record does. Charging the
 configured price keeps a synthesis from failing over an unreadable cost and stops a caller's spend from
-being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §59).
+being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §66).
 
 ---
 
@@ -348,7 +348,7 @@ only at call start; a call that starts under quota runs to completion and notes 
 
 **Rationale:** A quota that only limited uncached calls would let a caller with a full cache keep spending through
 repeat calls, so the gate applies to every call. Checking at the start (not per clip) keeps a call whole once begun;
-the trade-off is bounded overspend under concurrency (§59).
+the trade-off is bounded overspend under concurrency (§66).
 
 ---
 
@@ -369,7 +369,7 @@ quota comparison in §34 is decided on exact values. Rounding happens only at th
 cost is charged that cost, and cache hits are charged nothing.
 
 **Rationale:** Charging $0 on a read failure let the spend under-count against the quota. The configured price is
-an estimate, so the fallback is visible in the log and is listed in §59 for calibration.
+an estimate, so the fallback is visible in the log and is listed in §66 for calibration.
 
 ---
 
@@ -391,7 +391,7 @@ audio. The clip is not charged.
 
 **Rationale:** The audio has already been synthesized and paid for upstream; failing the caller's call over a
 bookkeeping write would hide the audio without refunding the cost. The trade-off is an uncharged clip, recorded in
-§59 as a known gap.
+§66 as a known gap.
 
 ---
 
@@ -466,7 +466,7 @@ both messages, so the failure is handled the same way and only its advice differ
 `status <code>`.
 
 **Rationale:** One format for every host means a client parses one string. No requirement pinned the old wording, so the change
-was low-risk. Any client that parsed `status <code>` would need updating (see §59).
+was low-risk. Any client that parsed `status <code>` would need updating (see §66).
 
 ---
 
@@ -614,7 +614,83 @@ intermittently or on every run, which is what happened before the wrapup fix to 
 
 ---
 
-## 59. Known Issues and Deferred Work
+## 59. User Detail Is Addressed by Email and Resolved to the Subject
+
+**Decision:** The User Detail route is `/admin/users/{email}?month=`. The store resolves the email to the person's
+Okta subject; if two `users` rows share an email, the lookup fails rather than guessing.
+
+**Rationale:** The Usage screen links each row by its email, which is what an administrator sees and can read in a
+link. Every stored record is keyed by subject (Security Baseline), so the subject stays the owner and the email is
+only the address. Failing on a duplicate avoids showing one person's month as another's.
+
+---
+
+## 60. Dialog Escape Handled on the Content; Focus Returned Explicitly
+
+**Decision:** The "Use default…" confirmation (`BbAlertDialog`) handles Escape with an `@onkeydown` on its content,
+because the component has no Escape option. On close, focus returns to the "Use default…" control through
+`peakFocus.restore` (`wwwroot/js/menu-focus.js`). The safe option, Cancel, is the default and is focused on open.
+
+**Rationale:** The UX Baseline requires Escape to cancel a destructive action and focus to return to the invoking
+control. The library does not provide both, so the page supplies them. The Cancel-first order keeps Enter on the
+safe path.
+
+---
+
+## 61. Save Reads the Field's On-Screen Value at Submit
+
+**Decision:** Saving a quota reads the amount field's on-screen value at submit (`peakForm.value`, `menu-focus.js`)
+rather than the value bound through `BbInput`'s change notification.
+
+**Rationale:** The change notification for a field can arrive after the submit event, so a bound value can be one
+keystroke behind what the administrator typed. Reading the field at submit makes the saved amount match the screen.
+
+---
+
+## 62. Quota Amounts Rounded to the Cent and Capped at $1,000,000
+
+**Decision:** A quota is accepted when it is $0.00 or more and $1,000,000.00 or less, and it is stored rounded to the
+cent. Other input gets an inline message naming the fix (for example "Enter an amount of $0.00 or more, for example 60").
+
+**Rationale:** Money is stored as integer nano-dollars (§35), and the screen shows cents, so a quota finer than a cent
+would look wrong. The cap stops a typo from creating an effectively unlimited quota. Amounts are checked in
+`UserDetailService.ParseAmount` before any store call, so the inline messages and the stored value agree.
+
+---
+
+## 63. Requests Table Stacks Into Labelled Lines Below 720 px
+
+**Decision:** Below 720 CSS px the User Detail requests table stops being a grid and each cell becomes a labelled line
+(`data-th`), so no column is clipped.
+
+**Rationale:** At 200% zoom (640 CSS px) the table's `overflow: hidden` box clipped the Source column, which was
+unreachable. The first handoff reported the layout floor as passing; the wrapup check reproduced the clipping and
+fixed it. The browser test for the layout floor now fails on any clipped table cell, so the rule is guarded.
+
+---
+
+## 64. Usage Emails Link to User Detail With the Month Shown
+
+**Decision:** Each email on the Usage screen links to `/admin/users/{email}?month=…`, carrying the month the table
+shows. On User Detail the "Usage" navigation item is marked `aria-current="true"`, because the page sits under Usage.
+
+**Rationale:** An administrator who drills into a person returns to the same month, and the navigation still shows
+where they are. Marking Usage rather than no item keeps the current-item rule (WCAG 2.4.6 navigation baseline) true
+on the detail page.
+
+---
+
+## 65. Page Titles Use a Middle Dot Separator
+
+**Decision:** Every dashboard page title follows the form `<Screen> · PeakMedia Gateway`, for example
+"My usage · PeakMedia Gateway".
+
+**Rationale:** One separator across the dashboard keeps titles consistent and unique per screen (UX Baseline,
+document title). The earlier em-dash form on the Usage page was changed to match.
+
+---
+
+## 66. Known Issues and Deferred Work
 
 - **Quota is checked only at call start.** Concurrent calls can each start under quota, so overspend is bounded by
   concurrency × 40 clips (§34).
@@ -671,8 +747,14 @@ intermittently or on every run, which is what happened before the wrapup fix to 
   Not part of any requirement; investigate when the admin pages next change.
 - **Emails wrap mid-word at 200% zoom.** At 200% zoom (640 CSS px) emails in the admin Usage table wrap mid-word. Readable,
   with no horizontal scroll.
-- **Admin wireframe deviations.** Emails on the Usage screen are not yet links to User detail (S-03, Epic EwgA3Zf), and the
-  Total row's Quota cell is blank instead of "—" (`docs/product-vision-planning/ux/screens.md`).
+- **Admin wireframe deviations.** The Total row's Quota cell on the Usage screen is blank instead of "—"
+  (`docs/product-vision-planning/ux/screens.md`).
+- **Quota reset records no administrator.** "Use default…" deletes the override row, and its log line names neither the
+  administrator nor the time. The Key Components of Epic EwgA3Zf asked for both; no TOR covers it.
+- **Email links on Usage are not visually distinguished.** They have no underline or colour; the wireframe underlines them.
+- **Quota field shows a red border while a save is in progress.** Cosmetic; seen in `.autopilot/look/05`.
+- **Usage (S-02) table clips between about 480 and 630 CSS px.** Outside the declared layout-floor points (320 px and 200%
+  zoom), so it passes the floor; the User Detail table does not clip there (§63).
 - **Blazor Blueprint MCP server was unreachable in the implementing session.** Components were taken from the
   library's llms.txt and checked against its XML docs, the fallback CLAUDE.md allows. Re-check each `Bb*` usage through
   the `blazorblueprint` server once it connects.

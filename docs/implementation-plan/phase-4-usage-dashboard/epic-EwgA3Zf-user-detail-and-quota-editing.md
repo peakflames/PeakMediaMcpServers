@@ -1,7 +1,7 @@
 # Epic EwgA3Zf: User detail and quota editing
 
 **Phase:** 4 — Usage dashboard
-**Status:** Not Started
+**Status:** Complete — 2026-11-14
 **Dependencies:** Epic G8jMzOz (Admin usage and cache overview — Usage screen and admin navigation)
 **Planned by:** Todd Schavey
 **Planned:** 2026-11-12

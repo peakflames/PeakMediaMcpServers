@@ -48,7 +48,7 @@ public sealed class AdminUsageTests(BrowserFixture browser)
         await Assertions.Expect(Table(page).Locator("tbody tr")).ToHaveCountAsync(3);
         await Assertions.Expect(Table(page).Locator("tbody tr th")).ToHaveTextAsync(["pat@example.com", "sam@example.com", "lee@example.com"]);
         await Assertions.Expect(page.Locator("main [data-subtitle]")).ToHaveTextAsync("2026-11 · 3 users · 1 over quota · sorted by Spent, highest first");
-        Assert.Equal("Usage — PeakMedia Gateway", await page.TitleAsync());
+        Assert.Equal("Usage · PeakMedia Gateway", await page.TitleAsync());
         await page.Context.CloseAsync();
     }
 

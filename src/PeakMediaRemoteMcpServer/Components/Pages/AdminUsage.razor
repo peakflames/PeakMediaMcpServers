@@ -8,7 +8,7 @@
    highest spend first, with a Total footer. Administrators only (AdminOnly + AdminUsageService). *@
 
 <AdminOnly>
-    <PageTitle>Usage — PeakMedia Gateway</PageTitle>
+    <PageTitle>Usage · PeakMedia Gateway</PageTitle>
 
     <div class="page-header">
         <h1>Usage</h1>
@@ -85,7 +85,7 @@
                         @foreach (var row in report.Rows)
                         {
                             <tr data-user="@row.Email">
-                                <th scope="row" data-th="Email" class="email">@row.Email</th>
+                                <th scope="row" data-th="Email" class="email"><a href="@UserLink(row)">@row.Email</a></th>
                                 <td data-th="Spent" class="num spent">@UsageText.Dollars(row.Spent)</td>
                                 <td data-th="Quota" class="num">@UsageText.Dollars(row.Quota)</td>
                                 <td data-th="Characters" class="num">@Count(row.Characters)</td>
@@ -170,6 +170,12 @@
     {
         _month = Usage.CurrentMonthLabel;
         await LoadAsync();
+    }
+
+    /// <summary>User Detail (S-03) for the row's person, showing the month this table shows.</summary>
+    private string UserLink(AdminUsageRow row)
+    {
+        return $"/admin/users/{Uri.EscapeDataString(row.Email)}?month={Uri.EscapeDataString(_load.Value?.Month ?? _month)}";
     }
 
     private static string Count(long value)
