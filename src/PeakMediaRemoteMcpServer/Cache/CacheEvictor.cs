@@ -68,6 +68,15 @@ public sealed class CacheEvictor(
                     await delete.ExecuteNonQueryAsync(cancellationToken);
                 }
 
+                await using (var record = connection.CreateCommand())
+                {
+                    record.CommandText = "INSERT INTO cache_evictions (cache_key, at_utc, size_bytes) VALUES ($key, $at, $size);";
+                    record.Parameters.AddWithValue("$key", key);
+                    record.Parameters.AddWithValue("$at", clock.GetUtcNow().ToUnixTimeMilliseconds());
+                    record.Parameters.AddWithValue("$size", size);
+                    await record.ExecuteNonQueryAsync(cancellationToken);
+                }
+
                 DeleteFile(key);
                 total -= size;
                 freed += size;

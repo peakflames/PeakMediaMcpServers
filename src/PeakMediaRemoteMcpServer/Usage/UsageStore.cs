@@ -3,6 +3,9 @@ namespace PeakMediaRemoteMcpServer.Usage;
 /// <summary>Month-to-date totals of one caller's usage log.</summary>
 public sealed record UsageTotals(decimal Spent, int ClipsSynthesized, int CacheHits);
 
+/// <summary>One user's month in the admin usage list. <see cref="Clips"/> counts every requested clip (synthesized and cache hits).</summary>
+public sealed record UserMonthUsage(string Subject, string Email, decimal Spent, decimal Quota, long Characters, int Clips, int CacheHits);
+
 /// <summary>
 /// The usage log: one row per clip of a call, owned by the caller's OIDC subject. Every read and write
 /// names the acting caller and the owner subject and is decided by <see cref="AccessRule"/> — a caller
@@ -40,6 +43,61 @@ public sealed class UsageStore(SqliteConnectionFactory connections, TimeProvider
         command.Parameters.AddWithValue("$hit", entry.CacheHit ? 1 : 0);
         await command.ExecuteNonQueryAsync(cancellationToken);
         return Result.Ok();
+    }
+
+    /// <summary>
+    /// Every user's totals for <paramref name="month"/> (administrators only): one row per user with
+    /// usage in the month, with their email (the subject when they have no users row) and their quota
+    /// (override, else <paramref name="defaultQuotaUsd"/>). Clips count every requested clip —
+    /// synthesized and cache hits.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<UserMonthUsage>>> ListMonthAsync(Caller admin, UsageMonth month, decimal defaultQuotaUsd, CancellationToken cancellationToken)
+    {
+        var allowed = AccessRule.RequireAdmin(admin);
+        if (allowed.IsFailed)
+        {
+            return Result.Fail<IReadOnlyList<UserMonthUsage>>(allowed.Errors);
+        }
+
+        var opened = await connections.OpenAsync(cancellationToken);
+        if (opened.IsFailed)
+        {
+            return Result.Fail<IReadOnlyList<UserMonthUsage>>(opened.Errors);
+        }
+
+        await using var connection = opened.Value;
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT l.subject,
+                   COALESCE(u.email, l.subject),
+                   q.monthly_nanousd,
+                   SUM(l.cost_nanousd),
+                   SUM(l.characters),
+                   COUNT(*),
+                   SUM(l.cache_hit)
+            FROM usage_log l
+            LEFT JOIN users u ON u.subject = l.subject
+            LEFT JOIN quota_overrides q ON q.subject = l.subject
+            WHERE l.at_utc >= $start AND l.at_utc < $end
+            GROUP BY l.subject;
+            """;
+        command.Parameters.AddWithValue("$start", month.StartUtc.ToUnixTimeMilliseconds());
+        command.Parameters.AddWithValue("$end", month.ResetsUtc.ToUnixTimeMilliseconds());
+        var rows = new List<UserMonthUsage>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new UserMonthUsage(
+                reader.GetString(0),
+                reader.GetString(1),
+                NanoUsd.ToUsd(reader.GetInt64(3)),
+                reader.IsDBNull(2) ? defaultQuotaUsd : NanoUsd.ToUsd(reader.GetInt64(2)),
+                reader.GetInt64(4),
+                (int)reader.GetInt64(5),
+                (int)reader.GetInt64(6)));
+        }
+
+        return Result.Ok<IReadOnlyList<UserMonthUsage>>(rows);
     }
 
     public async Task<Result<UsageTotals>> GetTotalsAsync(Caller actor, string ownerSubject, UsageMonth month, CancellationToken cancellationToken)

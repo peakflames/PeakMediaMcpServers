@@ -113,6 +113,20 @@ public sealed class SchemaMigrator
                 set_at_utc      INTEGER NOT NULL
             );
             """),
+
+        // 4 — cache overview (Epic G8jMzOz): one row per clip the eviction pass removed, so the admin
+        // Cache screen can count "evicted this month". A system record of the shared cache with no
+        // caller owner; it is read only through the admin-gated CacheStatsReader. Times are Unix
+        // milliseconds (UTC); counting starts when this migration is applied.
+        (4, """
+            CREATE TABLE cache_evictions (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                cache_key  TEXT NOT NULL,
+                at_utc     INTEGER NOT NULL,
+                size_bytes INTEGER NOT NULL
+            );
+            CREATE INDEX ix_cache_evictions_at ON cache_evictions(at_utc);
+            """),
     ];
 
     private readonly SqliteConnectionFactory _connections;

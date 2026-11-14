@@ -151,6 +151,38 @@ public sealed class FocusAndContrastTests(BrowserFixture browser)
         await page.Context.CloseAsync();
     }
 
+    [Fact]
+    public async Task TOR_09_BLJrVJ6_admin_usage_and_cache_text_contrast_in_light_and_dark()
+    {
+        // TOR-09-BLJrVJ6 on Usage (S-02, with an OVER badge) and Cache (S-04).
+        await using var host = await DashboardHost.StartAsync();
+        await host.RegisterUserAsync(PatEmail);
+        await host.SetQuotaAsync(PatEmail, 25.00m);
+        await host.SpendAsync(PatEmail, 25.32m, clips: 3, cacheHits: 1);
+        var page = await browser.NewPageAsync();
+        await host.SignInAsync(page, StubUser.For("ada@example.com", DashboardHost.AdminGroup));
+        await DashboardHost.WaitInteractiveAsync(page);
+
+        foreach (var theme in new[] { "light", "dark" })
+        {
+            await page.GetByLabel("Theme").SelectOptionAsync(theme);
+            foreach (var (path, ready) in new[] { ("/admin", "main [data-users-table]"), ("/admin/cache", "main [data-stat-cards]") })
+            {
+                await page.GotoAsync(host.BaseUrl + path);
+                await Assertions.Expect(page.Locator(ready)).ToBeVisibleAsync();
+                var measured = await page.EvaluateAsync<TextContrast[]>(ContrastScript);
+                Assert.True(measured.Length >= 10, $"{theme} {path}: measured only {measured.Length} text elements");
+                foreach (var text in measured)
+                {
+                    var minimum = text.Large ? 3.0 : 4.5;
+                    Assert.True(text.Ratio >= minimum, $"{theme} {path}: '{text.Text}' has contrast {text.Ratio:0.00}:1 (needs {minimum}:1)");
+                }
+            }
+        }
+
+        await page.Context.CloseAsync();
+    }
+
     private sealed class FocusedControl
     {
         public string Id { get; set; } = string.Empty;

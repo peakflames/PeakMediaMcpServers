@@ -1,0 +1,192 @@
+@page "/admin"
+@attribute [Authorize(Policy = McpAuthSetup.DashboardPolicy)]
+@implements IDisposable
+@inject AdminUsageService Usage
+@inject ILogger<AdminUsage> Logger
+
+@* S-02 Usage (wireframe docs/product-vision-planning/ux/wireframes/S-02-usage.html): every user's month,
+   highest spend first, with a Total footer. Administrators only (AdminOnly + AdminUsageService). *@
+
+<AdminOnly>
+    <PageTitle>Usage — PeakMedia Gateway</PageTitle>
+
+    <div class="page-header">
+        <h1>Usage</h1>
+        <div class="month-field">
+            <label for="month-select">Month</label>
+            <BbNativeSelect TValue="string" Id="month-select" Value="_month" ValueChanged="OnMonthChanged">
+                @foreach (var label in _months)
+                {
+                    <option value="@label">@label</option>
+                }
+            </BbNativeSelect>
+        </div>
+        @if (_load.State == LoadState.Loaded && _load.Value is { } shown)
+        {
+            <p class="page-meta" data-subtitle>@Subtitle(shown)</p>
+        }
+    </div>
+
+    @switch (_load.State)
+    {
+        case LoadState.Loading:
+            <div class="state-panel" data-state="loading">
+                <div class="loading-row">
+                    <p role="status">Loading usage for @_month…</p>
+                    @if (_load.ShowCancel)
+                    {
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="_load.Cancel">Cancel</BbButton>
+                    }
+                </div>
+            </div>
+            break;
+
+        case LoadState.Cancelled:
+            <div class="state-panel" data-state="cancelled">
+                <p role="status">Loading was cancelled.</p>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync">Retry</BbButton>
+            </div>
+            break;
+
+        case LoadState.Error:
+            <BbAlert Variant="AlertVariant.Danger" data-state="error">
+                <BbAlertDescription>Couldn't load usage for @_month. Check your connection and try again.</BbAlertDescription>
+            </BbAlert>
+            <div class="loading-row" style="margin-top: 0.75rem;">
+                <BbButton Variant="ButtonVariant.Outline" OnClick="LoadAsync">Retry</BbButton>
+            </div>
+            break;
+
+        case LoadState.Loaded when _load.Value!.Rows.Count == 0:
+            <div class="state-panel" data-state="empty">
+                <p class="state-title">No usage in @_load.Value.Month</p>
+                <p class="muted">Nobody requested narration in this month.</p>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="GoToCurrentMonth">Go to current month</BbButton>
+            </div>
+            break;
+
+        case LoadState.Loaded:
+            var report = _load.Value!;
+            <div class="table-wrap" data-state="populated">
+                <table class="usage-table" data-users-table>
+                    <caption class="sr-only">Usage per user for @report.Month, highest spend first</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Email</th>
+                            <th scope="col" class="num">Spent</th>
+                            <th scope="col" class="num">Quota</th>
+                            <th scope="col" class="num">Characters</th>
+                            <th scope="col" class="num">Clips</th>
+                            <th scope="col" class="num">Cache-hit rate</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in report.Rows)
+                        {
+                            <tr data-user="@row.Email">
+                                <th scope="row" data-th="Email" class="email">@row.Email</th>
+                                <td data-th="Spent" class="num spent">@UsageText.Dollars(row.Spent)</td>
+                                <td data-th="Quota" class="num">@UsageText.Dollars(row.Quota)</td>
+                                <td data-th="Characters" class="num">@Count(row.Characters)</td>
+                                <td data-th="Clips" class="num">@Count(row.Clips)</td>
+                                <td data-th="Cache-hit rate" class="num">@(row.CacheHitRatePercent)%</td>
+                                <td data-th="Status" data-status>
+                                    @if (row.IsOver)
+                                    {
+                                        <BbBadge Class="badge-over">OVER</BbBadge>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted" aria-label="Within quota">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr data-total>
+                            <th scope="row" data-th="" class="email">Total</th>
+                            <td data-th="Spent" class="num spent">@UsageText.Dollars(report.Total.Spent)</td>
+                            <td data-th="Quota" class="num"></td>
+                            <td data-th="Characters" class="num">@Count(report.Total.Characters)</td>
+                            <td data-th="Clips" class="num">@Count(report.Total.Clips)</td>
+                            <td data-th="Cache-hit rate" class="num">@(report.Total.CacheHitRatePercent)%</td>
+                            <td data-th="Status">@report.Total.OverCount over</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p class="footnote">Spent and quota in US dollars. Clips count every clip requested, cache hits included. OVER: spend has reached the monthly quota.</p>
+            break;
+    }
+</AdminOnly>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private IReadOnlyList<string> _months = [];
+    private string _month = string.Empty;
+    private PageLoad<AdminUsageReport> _load = null!;
+
+    protected override void OnInitialized()
+    {
+        _months = Usage.MonthLabels();
+        _month = Usage.CurrentMonthLabel;
+        _load = new PageLoad<AdminUsageReport>(
+            change => InvokeAsync(async () =>
+            {
+                await change();
+                StateHasChanged();
+            }),
+            Logger,
+            "Admin usage");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Only the interactive render loads: the first (server) render shows the loading state at once.
+        if (firstRender)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var user = AuthenticationState is null ? new ClaimsPrincipal() : (await AuthenticationState).User;
+        var month = _month;
+        await _load.RunAsync(token => Usage.GetAsync(user, month, token));
+    }
+
+    private async Task OnMonthChanged(string? value)
+    {
+        _month = value ?? Usage.CurrentMonthLabel;
+        await LoadAsync();
+    }
+
+    private async Task GoToCurrentMonth()
+    {
+        _month = Usage.CurrentMonthLabel;
+        await LoadAsync();
+    }
+
+    private static string Count(long value)
+    {
+        return value.ToString("N0", CultureInfo.InvariantCulture);
+    }
+
+    private static string Subtitle(AdminUsageReport report)
+    {
+        var users = report.Rows.Count == 1 ? "1 user" : $"{report.Rows.Count} users";
+        return report.Rows.Count == 0
+            ? $"{report.Month} · 0 users"
+            : $"{report.Month} · {users} · {report.Total.OverCount} over quota · sorted by Spent, highest first";
+    }
+
+    public void Dispose()
+    {
+        _load.Dispose();
+    }
+}

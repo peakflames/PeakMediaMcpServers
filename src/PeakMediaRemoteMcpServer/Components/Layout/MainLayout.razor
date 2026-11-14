@@ -30,6 +30,45 @@
                 <BbButton Type="ButtonType.Submit" Variant="ButtonVariant.Outline" Size="ButtonSize.Small">Sign out</BbButton>
             </form>
         </div>
+        @* Below 480 CSS px the navigation, email, theme and Sign out move into this sheet (app.css). *@
+        <div class="menu-trigger">
+            <BbSheet Open="_menuOpen" OpenChanged="OnMenuOpenChanged">
+                <BbSheetTrigger AsChild="true">
+                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Icon" AriaLabel="Open menu">
+                        <LucideIcon Name="menu" Size="20" aria-hidden="true" />
+                    </BbButton>
+                </BbSheetTrigger>
+                <BbSheetContent Class="menu-sheet" data-menu-sheet>
+                    <BbSheetHeader>
+                        <BbSheetTitle>Menu</BbSheetTitle>
+                    </BbSheetHeader>
+                    <nav class="sheet-nav" aria-label="Menu">
+                        <a href="/" aria-current="@CurrentFor("")">My usage</a>
+                        @if (_isAdmin)
+                        {
+                            <a href="/admin" aria-current="@CurrentFor("admin")">Usage</a>
+                            <a href="/admin/cache" aria-current="@CurrentFor("admin/cache")">Cache</a>
+                        }
+                    </nav>
+                    <div class="sheet-account">
+                        <span class="who">@_email</span>
+                        <div class="theme-choice">
+                            <label for="theme-select-menu">Theme</label>
+                            <BbNativeSelect TValue="string" Id="theme-select-menu" Size="NativeSelectSize.Small"
+                                            Value="_theme" ValueChanged="OnThemeChanged">
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                                <option value="system">System</option>
+                            </BbNativeSelect>
+                        </div>
+                        <form class="signout-form" method="post" action="/signout">
+                            <AntiforgeryToken />
+                            <BbButton Type="ButtonType.Submit" Variant="ButtonVariant.Outline" Size="ButtonSize.Small">Sign out</BbButton>
+                        </form>
+                    </div>
+                </BbSheetContent>
+            </BbSheet>
+        </div>
     </header>
 
     <main class="app-main" id="main">
@@ -48,6 +87,7 @@
     private string _email = string.Empty;
     private bool _isAdmin;
     private string _theme = "system";
+    private bool _menuOpen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -97,8 +137,27 @@
         return string.Equals(path, relative, StringComparison.OrdinalIgnoreCase) ? "page" : null;
     }
 
+    /// <summary>When the person closes the sheet (Escape, overlay, close button), focus returns to the menu button.</summary>
+    private async Task OnMenuOpenChanged(bool open)
+    {
+        _menuOpen = open;
+        if (!open)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("peakMenu.restoreFocus");
+            }
+            catch (JSDisconnectedException)
+            {
+                // The page closed; nothing to focus.
+            }
+        }
+    }
+
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
+        // A link chosen in the menu sheet closes it.
+        _menuOpen = false;
         InvokeAsync(StateHasChanged);
     }
 

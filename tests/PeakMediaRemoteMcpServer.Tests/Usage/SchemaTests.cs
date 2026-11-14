@@ -12,7 +12,7 @@ public class SchemaTests
         var opened = await host.Services.GetRequiredService<SqliteConnectionFactory>().OpenAsync();
         await using var connection = opened.Value;
 
-        Assert.Equal(3L, await ScalarAsync(connection, "SELECT MAX(version) FROM schema_version;"));
+        Assert.Equal(4L, await ScalarAsync(connection, "SELECT MAX(version) FROM schema_version;"));
         var usageColumns = await ColumnsAsync(connection, "usage_log");
         var quotaColumns = await ColumnsAsync(connection, "quota_overrides");
 
