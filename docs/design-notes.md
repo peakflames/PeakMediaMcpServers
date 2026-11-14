@@ -1,6 +1,6 @@
 # PeakMedia MCP Servers — Design Decision Notes
 
-> **Status:** Decisions as built through the dashboard-shell-and-my-usage epic (Ail1fOL, v0.1.0).
+> **Status:** Decisions as built through the admin-usage-and-cache-overview epic (G8jMzOz, v0.1.0).
 > Decisions from later epics are added by `/peak-workflow:refresh-docs` from their session handoffs.
 
 ---
@@ -268,7 +268,7 @@ When the cost cannot be read, the clip is charged at the model's configured pric
 
 **Rationale:** The speech response does not carry its price; the generation record does. Charging the
 configured price keeps a synthesis from failing over an unreadable cost and stops a caller's spend from
-being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §53).
+being understated. The live header and lookup are confirmed by the live gate (`build.py test-live`, see §59).
 
 ---
 
@@ -348,7 +348,7 @@ only at call start; a call that starts under quota runs to completion and notes 
 
 **Rationale:** A quota that only limited uncached calls would let a caller with a full cache keep spending through
 repeat calls, so the gate applies to every call. Checking at the start (not per clip) keeps a call whole once begun;
-the trade-off is bounded overspend under concurrency (§53).
+the trade-off is bounded overspend under concurrency (§59).
 
 ---
 
@@ -369,7 +369,7 @@ quota comparison in §34 is decided on exact values. Rounding happens only at th
 cost is charged that cost, and cache hits are charged nothing.
 
 **Rationale:** Charging $0 on a read failure let the spend under-count against the quota. The configured price is
-an estimate, so the fallback is visible in the log and is listed in §53 for calibration.
+an estimate, so the fallback is visible in the log and is listed in §59 for calibration.
 
 ---
 
@@ -391,7 +391,7 @@ audio. The clip is not charged.
 
 **Rationale:** The audio has already been synthesized and paid for upstream; failing the caller's call over a
 bookkeeping write would hide the audio without refunding the cost. The trade-off is an uncharged clip, recorded in
-§53 as a known gap.
+§59 as a known gap.
 
 ---
 
@@ -466,7 +466,7 @@ both messages, so the failure is handled the same way and only its advice differ
 `status <code>`.
 
 **Rationale:** One format for every host means a client parses one string. No requirement pinned the old wording, so the change
-was low-risk. Any client that parsed `status <code>` would need updating (see §53).
+was low-risk. Any client that parsed `status <code>` would need updating (see §59).
 
 ---
 
@@ -526,14 +526,15 @@ second (Progress feedback baseline), even when storage is slow.
 
 ---
 
-## 51. Admin Addresses Answer 403 to Non-Administrators and 404 to Administrators
+## 51. Unknown Admin Addresses Answer 403 to Non-Administrators and 404 to Administrators
 
-**Decision:** Every `/admin` address renders Not Authorized (S-05). Non-administrators get HTTP 403 with a link back
-to My usage. Administrators get 404 until the admin pages arrive (Epic G8jMzOz). The decision is made server-side by
-`AccessRule.IsAdmin`, never by the front end.
+**Decision:** `/admin` (Usage) and `/admin/cache` (Cache) are the admin pages (Epic G8jMzOz). Every other `/admin`
+address renders Not Authorized (S-05): non-administrators get HTTP 403 with a link back to My usage, and administrators
+get HTTP 404 with a "Page not found" notice. The decision is made server-side by `AccessRule.IsAdmin`, never by the
+front end.
 
-**Rationale:** A non-administrator gets an explicit answer and a way out rather than a bare 404. Administrators get
-no placeholder page for screens that do not exist yet.
+**Rationale:** A non-administrator gets an explicit answer and a way out rather than a bare 404. An administrator who
+mistypes an admin address gets a real not-found answer rather than a page that pretends the screen exists.
 
 ---
 
@@ -550,7 +551,70 @@ is open (TOR-08-rxZtbxT); a child process would need a request-reachable test ho
 
 ---
 
-## 53. Known Issues and Deferred Work
+## 53. Admin Pages Are Gated Twice on the Server
+
+**Decision:** Each admin page (`/admin`, `/admin/cache`) is wrapped in `AdminOnly`, which decides with `AccessRule.IsAdmin`,
+and each admin data read calls `AccessRule.RequireAdmin` itself (`UsageStore.ListMonthAsync`, `CacheStatsReader`).
+
+**Rationale:** A page guard alone would leave the data reads reachable by any path that calls the service. Checking in
+both places keeps the rule in `AccessRule` (Security Baseline) while never letting a front-end check decide access.
+
+---
+
+## 54. Usage Counts Every Requested Clip; Hit Rate Is Whole Percent of Requests
+
+**Decision:** On the admin Usage screen, "clips" counts every requested clip, synthesized and cache hits alike. The cache-hit
+rate is hits divided by clips, rounded to a whole percent. The Total row's rate comes from the summed counts, not an average
+of the per-user rates.
+
+**Rationale:** A cache hit is still a clip the person asked for, so counting only synthesized clips would hide the cache's
+benefit. Deriving the Total's rate from summed counts keeps it consistent with the rows above it; averaging rates would
+weight a one-clip user the same as a heavy one.
+
+---
+
+## 55. Evictions Recorded in `cache_evictions` (Migration 4)
+
+**Decision:** The "evicted this month" figure on the Cache screen is backed by the `cache_evictions` table (migration 4).
+`CacheEvictor` writes one row per evicted clip, owned by the subject that created the clip. Counting starts when the
+migration is applied; past evictions are not backfilled.
+
+**Rationale:** The LRU pass leaves no history behind, so a count needs its own record. Owning each row by the clip's creator
+follows the owner-column rule for every table that holds a caller's records. Not backfilling is honest: the past cannot
+be reconstructed from the cache index.
+
+---
+
+## 56. Cache Sizes Are GiB
+
+**Decision:** "GB" on the Cache screen means GiB (2^30 bytes), matching `Storage:CacheMaxGb`.
+
+**Rationale:** The cap is set in the same units the screen shows, so a cap of 10 reads as 10 GB of the cache's size
+without a unit conversion the operator has to remember.
+
+---
+
+## 57. The Cache Empty State Keeps Its Stat Cards
+
+**Decision:** When the cache holds no clips, the Cache screen shows its empty text and all five stat cards with zero values,
+and one Refresh button sits in the page header.
+
+**Rationale:** The empty state stays distinguishable by visible text (UX Baseline), while the cards still answer "how big is
+the cache, how many clips" with explicit zeros. One header button keeps Refresh in the same place in every state.
+
+---
+
+## 58. End-to-End Tests Wait for a Finished Load, Not for the Page to Appear
+
+**Decision:** Browser tests that act right after sign-in wait for a page's first data load to finish over the live circuit.
+Waiting for the mere presence of `[data-state]` is not enough, because the server prerender already shows `data-state="loading"`.
+
+**Rationale:** The prerendered page exists before its event handlers are attached. A test that clicks in that gap fails
+intermittently or on every run, which is what happened before the wrapup fix to `DashboardHost.WaitInteractiveAsync`.
+
+---
+
+## 59. Known Issues and Deferred Work
 
 - **Quota is checked only at call start.** Concurrent calls can each start under quota, so overspend is bounded by
   concurrency × 40 clips (§34).
@@ -599,6 +663,16 @@ is open (TOR-08-rxZtbxT); a child process would need a request-reachable test ho
 - **Dashboard sign-in callback is not yet confirmed on a real Okta tenant.** The Okta app needs `<gateway>/signin-oidc`
   as a sign-in redirect URI next to `/oauth/callback`. Tests cover the flow with the stub issuer; the release check
   covers Okta.
+- **Usage query errors bypass the error state.** `UsageStore.ListMonthAsync` does not catch `SqliteException` (unlike
+  `CacheStatsReader`), so a real query error on the admin Usage screen escapes `PageLoad` instead of showing the error
+  state. Catch it the same way `CacheStatsReader` does.
+- **Unknown admin address shows the browser's 404 page.** For an administrator, an unknown `/admin/...` address shows the
+  browser's own HTTP 404 page rather than the app's "Page not found" notice, so the response body appears to be replaced.
+  Not part of any requirement; investigate when the admin pages next change.
+- **Emails wrap mid-word at 200% zoom.** At 200% zoom (640 CSS px) emails in the admin Usage table wrap mid-word. Readable,
+  with no horizontal scroll.
+- **Admin wireframe deviations.** Emails on the Usage screen are not yet links to User detail (S-03, Epic EwgA3Zf), and the
+  Total row's Quota cell is blank instead of "—" (`docs/product-vision-planning/ux/screens.md`).
 - **Blazor Blueprint MCP server was unreachable in the implementing session.** Components were taken from the
   library's llms.txt and checked against its XML docs, the fallback CLAUDE.md allows. Re-check each `Bb*` usage through
   the `blazorblueprint` server once it connects.
