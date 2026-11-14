@@ -126,10 +126,15 @@ public sealed class DashboardHost : IAsyncDisposable
         }
     }
 
-    /// <summary>Waits until the interactive circuit is up (the theme choice is read over it).</summary>
+    /// <summary>
+    /// Waits until the interactive circuit is up and its event handlers are attached. The server prerender
+    /// already shows the page's loading state, so that alone proves nothing; every dashboard page loads its
+    /// data only over the live circuit, so a page whose load has finished is interactive.
+    /// </summary>
     public static async Task WaitInteractiveAsync(IPage page)
     {
-        await page.WaitForFunctionAsync("() => window.Blazor !== undefined && document.querySelector('[data-state]') !== null");
+        await page.WaitForFunctionAsync(
+            "() => window.Blazor !== undefined && document.querySelector('main [data-state]') !== null && document.querySelector(\"main [data-state='loading']\") === null");
     }
 
     /// <summary>
