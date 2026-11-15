@@ -50,6 +50,9 @@ toolchain-table row "C# / .NET", with conventions taken from the Bitbucket repo)
 
 ## Local Environment
 
+Setting up a new machine (tools, `.env`, Okta redirect URIs, connecting Claude Code, what does not
+move between machines): see [CONTRIBUTING.md](CONTRIBUTING.md). Keep the two in step.
+
 Run `build.py` from the project venv: `source .venv/bin/activate` once per terminal (or call
 `.venv/bin/python build.py ...`). Claude Code's shell does not keep activation between commands —
 always use `.venv/bin/python build.py ...` there.
@@ -264,6 +267,30 @@ touches user data.
   issuer/resource URIs, `Storage:*`). The OpenRouter key arrives only through `OpenRouter__ApiKey`;
   the gateway refuses to start without it.
 - Option classes holding secrets are `sealed class`, never `record` (a record's `ToString()` prints every property).
+
+## Working with the Owner
+
+How the project owner prefers Claude to work. These hold for every session, every skill.
+
+- **Questions go through `AskUserQuestion`, never as questions in chat.** This includes interview,
+  grilling and discovery rounds, even when a skill prescribes a chat format. Batch up to 4 questions
+  per call, recommended option first, with the context in the option descriptions.
+  *(Owner: "ALWAYS use your AskUserQuestion tool and not vomit to the chat.")*
+- **The popup hides the chat.** While an `AskUserQuestion` popup is open, the owner cannot see text
+  written just before it. Make each question self-contained: put the facts needed to answer in the
+  question text, option descriptions or a `preview`. Never end a turn with "reply when ready". For a
+  long checklist the owner must do first, print it, then ask a single "Done — continue" / "Not yet"
+  popup.
+- **Assume a non-technical reader; do the terminal work for them.** Run commands on the owner's
+  behalf rather than handing them commands to type, unless they say they want to run something
+  themselves (for example starting the server): then give the exact commands. Never ask them to
+  find or open a file; open it for them.
+- **Progress updates: a little context, not bare one-liners.** While attending a long run
+  (autopilot, a build, a test suite), say what just happened, what it means, and what comes next with
+  rough time and cost: 1–3 short lines per milestone. Not walls of text either. *(Owner: one-liners
+  were "almost too minimal", but "I don't want you to over do it".)*
+- **Public repo: keep personal details out of issues and commits.** No email addresses, home-folder
+  paths or secrets in GitHub issues, PR text or commit messages.
 
 ## Peak Workflow
 

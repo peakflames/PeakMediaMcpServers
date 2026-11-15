@@ -61,8 +61,10 @@ One-time setup by an Okta administrator:
 
 1. Admin Console → **Applications → Create App Integration** → **OIDC** → **Web Application**;
    grant type **Authorization Code** only.
-2. Sign-in redirect URIs: `http://localhost:5108/oauth/callback` (local) and
-   `https://<gateway-host>/oauth/callback` (production). No sign-out URI is needed.
+2. Sign-in redirect URIs: `http://localhost:5108/oauth/callback` (MCP clients) and
+   `http://localhost:5108/signin-oidc` (the usage dashboard), plus the same two paths on
+   `https://<gateway-host>` for production. Optional sign-out redirect URI:
+   `http://localhost:5108/signout-callback-oidc`.
 3. **Assignments:** limit access to selected groups or people — anyone else is refused (`access_denied`).
 4. **Directory → Groups:** create the admin group (e.g. `PeakMedia Admins`); set `Admin__Group` to its exact name.
 5. App → **Sign On** → **Token claims (OIDC)** → **Add expression**: Name `peakmedia_groups` (Okta
@@ -94,7 +96,7 @@ dotnet run --project src/PeakMediaMcpServer                # serve MCP over stdi
 ## Development
 
 See [CLAUDE.md](CLAUDE.md) for the project's development workflow conventions and
-[CONTRIBUTING.md](CONTRIBUTING.md) (if present) for contributor guidelines.
+[CONTRIBUTING.md](CONTRIBUTING.md) for setting up a new machine and how work is done.
 
 ## License
 
