@@ -59,7 +59,7 @@ redirect URI in the client app settings"* when opening the dashboard.
 ```bash
 .venv/bin/python build.py build
 .venv/bin/python build.py test
-set -a; source .env; set +a; .venv/bin/python build.py start   # start/run do NOT read .env themselves
+.venv/bin/python build.py start        # start/run load .env themselves; an already-exported variable wins
 curl http://localhost:5108/version     # {"name":"PeakMediaRemoteMcpServer","version":"0.1.0"}
 ```
 

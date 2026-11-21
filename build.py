@@ -227,10 +227,11 @@ def stop_background() -> None:
         sys.exit(1)
 
 
-def read_env_file_value(name: str) -> str:
-    """The value of `name` in .env (KEY=VALUE lines, optional `export`, optional quotes), or ''."""
+def read_env_file() -> dict:
+    """Every setting in .env (KEY=VALUE lines, optional `export`, optional quotes); {} without the file."""
+    values = {}
     if not ENV_FILE.exists():
-        return ""
+        return values
     for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -239,9 +240,21 @@ def read_env_file_value(name: str) -> str:
         key = key.strip()
         if key.startswith("export "):
             key = key[len("export "):].strip()
-        if key == name:
-            return value.strip().strip('"').strip("'")
-    return ""
+        values[key] = value.strip().strip('"').strip("'")
+    return values
+
+
+def read_env_file_value(name: str) -> str:
+    """The value of `name` in .env, or ''."""
+    return read_env_file().get(name, "")
+
+
+def env_file_settings() -> dict:
+    """The .env settings for `start` and `run`; a variable already set in the environment wins. Values are never printed."""
+    settings = {key: value for key, value in read_env_file().items() if key not in os.environ}
+    if settings:
+        print(f"Loaded {len(settings)} setting(s) from {ENV_FILE}")
+    return settings
 
 
 def run_live_tests() -> int:
@@ -425,7 +438,8 @@ def run_dotnet_command(command: str) -> None:
             # Set environment for Development mode
             env = os.environ.copy()
             env["ASPNETCORE_ENVIRONMENT"] = "Development"
-            
+            env.update(env_file_settings())
+
             subprocess.run(
                 ["dotnet", "run", "--project", PROJECT_PATH, "--no-restore"],
                 env=env
@@ -458,8 +472,8 @@ def run_dotnet_command(command: str) -> None:
                 ["dotnet", "build", SOLUTION_PATH],
                 check=True
             )
-            start_background()
-        
+            start_background(extra_env=env_file_settings())
+
         elif command == "stop":
             stop_background()
 
