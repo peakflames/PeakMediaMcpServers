@@ -115,7 +115,7 @@ src/PeakMediaRemoteMcpServer/      HTTP gateway (ASP.NET): Program.cs, Configura
   Broker/Endpoints/                metadata, JWKS, register, authorize, callback, token, consent cookie
   Broker/Storage/                  AppMetaStore, UserStore, ClientStore, TransactionStore, CodeStore, RefreshTokenStore, TokenHashing
   Usage/                           UsageStore (usage log reads/writes; admin-gated `ListMonthAsync` and per-user `ListUserMonthAsync`), QuotaStore (default quota, admin overrides; `GetQuotaInfoAsync`, admin-gated `ClearOverrideAsync`), UsageLedger (binds stores to the caller from the token), UsageMonth (UTC calendar-month window, NanoUsd money type), UsageStatusReader (month-parameterized reader shared by `my_usage` and My Usage), DashboardUsageService (dashboard facade over the reader), AdminUsageService (admin Usage report: sort, OVER, totals, hit rates), UserDetailService (admin User Detail: report, save and reset quota, amount parsing, display name)
-  Components/                      Blazor root (`App.razor`, `Routes.razor`, `_Imports.razor`, `RedirectToSignIn.razor`), `AdminOnly.razor` (admin gate for the admin pages), `PageLoad.cs` (shared load state: loading → loaded / error / cancelled, Cancel after 10 s), `Layout/` (MainLayout app shell, AuthLayout brand-only), `Pages/` (MyUsage, AdminUsage, AdminUserDetail, AdminCache, NotAuthorized, SignedOut)
+  Components/                      Blazor root (`App.razor`, `Routes.razor`, `_Imports.razor`, `RedirectToSignIn.razor`), `AdminOnly.razor` (admin gate for the admin pages), `SetStatus.razor` (sets the HTTP status of the server render; Not Authorized uses it for its 404), `PageLoad.cs` (shared load state: loading → loaded / error / cancelled, Cancel after 10 s), `Layout/` (MainLayout app shell, AuthLayout brand-only), `Pages/` (MyUsage, AdminUsage, AdminUserDetail, AdminCache, NotAuthorized, SignedOut)
   Dashboard/                       DashboardEndpoints (`POST /signout`)
   wwwroot/                         theme.css (design tokens), app.css (app layout), js/theme-choice.js (light / dark / system), js/menu-focus.js (focus return for the menu sheet and dialogs; `peakFocus.restore`, `peakForm.value`)
 tests/PeakMediaMcpServer.Tests/    stdio tests (process-level; SoloNarration/ drives the built binary over stdin/stdout via tests/TestSupport/StdioClient.cs)
@@ -127,7 +127,7 @@ tests/Fakes/                       FakeOpenRouter (canned PCM at POST /api/v1/au
 tests/PeakMediaRemoteMcpServer.Tests/Narration/  one test file per narration TOR group; NarrationClient signs in through the real broker
 tests/StubAuthorizationServer/     StubOidcIssuer — stub OIDC provider (Okta stand-in) on real Kestrel
 tests/manual/                      operator-observed checklists (TOR-02-hKpbfCf: real Okta round-trip; TOR-08-nLHs0pq: admin landing after real Okta sign-in)
-build.py                           build / start / stop / test / mcp / log helper (run from .venv)
+build.py                           build / start / stop / test / mcp / log helper (run from .venv); `start` and `run` load `.env` into the app's environment, an already-exported variable wins
 ```
 
 **Request → MCP tool path.** A tool is one file in `PeakMediaMcpTools`, a partial class per tool
@@ -223,7 +223,8 @@ Server**, built with Blazor Blueprint UI (`BlazorBlueprint.Components` 4.2, `Bla
 
 - **Composition.** `Components/App.razor` loads `wwwroot/theme.css` (design tokens) →
   `_content/BlazorBlueprint.Components/blazorblueprint.css` → `wwwroot/app.css` (app layout), with
-  `theme-init.js` in `<head>` (dark class before first paint). `Routes` runs Interactive Server
+  `theme-init.js` in `<head>` (dark class before first paint) and an empty `data:,` favicon so pages load
+  with no console error. `Routes` runs Interactive Server
   everywhere except pages marked `[ExcludeFromInteractiveRouting]` (Signed Out, static SSR).
   `Components/Layout/MainLayout.razor` is the app shell: brand, primary nav (`aria-current` on the
   current item; "Usage" / "Cache" only when `AccessRule.IsAdmin`), signed-in email, Theme select

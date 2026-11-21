@@ -143,6 +143,11 @@ Without either it probes `/mcp` and prints "requires sign-in (HTTP 401)" with bo
 
 **Rationale:** A plain message names the cause and the next action instead of a protocol error.
 
+`build.py start` and `run` also load every setting in `.env` into the app's environment, so nobody has to
+`source` it first. A variable already exported in the shell wins over the file, and only the count of settings
+loaded is printed, never a value. `smoke` and `test-live` keep reading just `OpenRouter__ApiKey` from `.env`, so the
+smoke gate stays on the stub sign-in server rather than the real Okta settings.
+
 ## 16. Container Runs as Non-Root
 
 **Decision:** The published image runs as the non-root `app` user.
